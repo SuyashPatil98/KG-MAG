@@ -38,7 +38,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: [Dockerfile.backend](http://_vscodecontentref_/0)
+          file: docker/Dockerfile.backend
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/suyashpatil98/kg-mag-backend:latest
@@ -65,7 +65,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: [Dockerfile.frontend](http://_vscodecontentref_/1)
+          file: docker/Dockerfile.frontend
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/suyashpatil98/kg-mag-frontend:latest
