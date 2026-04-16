@@ -1,0 +1,41 @@
+# KG-MAG — Python Dependencies
+# Pin versions for reproducibility in production.
+
+# ── FastAPI ───────────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17      # for file uploads
+
+# ── LLM ──────────────────────────────────────────────────────────────────────
+google-genai==0.5.0
+# ── Embeddings ────────────────────────────────────────────────────────────────
+sentence-transformers==3.3.1
+torch==2.5.1                  # CPU build by default; see Dockerfile for GPU
+torchvision==0.20.1
+
+# ── Vector DB ─────────────────────────────────────────────────────────────────
+faiss-cpu==1.9.0.post1        # swap for faiss-gpu if CUDA available
+chromadb==0.5.23              # optional, controlled by VECTOR_DB env var
+
+# ── PDF / Document parsing ────────────────────────────────────────────────────
+pdfplumber==0.11.4
+pymupdf==1.24.14               # fallback PDF parser (also called fitz)
+
+# ── ML ────────────────────────────────────────────────────────────────────────
+scikit-learn==1.6.0
+numpy==1.26.4
+
+# ── HTTP / Async ──────────────────────────────────────────────────────────────
+httpx==0.28.0
+
+# ── Config & Validation ───────────────────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+structlog==24.4.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.0                  # also used as test client

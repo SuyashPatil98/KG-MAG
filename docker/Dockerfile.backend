@@ -1,0 +1,72 @@
+# ── KG-MAG Backend Dockerfile ────────────────────────────────────────────────
+# Multi-stage build:
+#   builder  — installs Python deps + downloads embedding model
+#   runtime  — lean production image
+
+# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# System dependencies for PDF parsing and torch
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ git curl \
+    libglib2.0-0 libsm6 libxrender1 libxext6 \
+    libjpeg62-turbo libopenjp2-7 libz3-4 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies into a virtual environment
+COPY backend/requirements.txt .
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip wheel && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# Pre-download the embedding model into the image
+# This avoids runtime downloads and supports air-gapped deployments
+ENV SENTENCE_TRANSFORMERS_HOME=/opt/models
+RUN /opt/venv/bin/python -c "\
+from sentence_transformers import SentenceTransformer; \
+SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+# Runtime system libs only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 libsm6 libxrender1 libxext6 \
+    libjpeg62-turbo libopenjp2-7 libz3-4 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy venv and pre-downloaded model from builder
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/models /opt/models
+
+# Make venv active
+ENV PATH="/opt/venv/bin:$PATH"
+ENV SENTENCE_TRANSFORMERS_HOME=/opt/models
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Copy application code
+COPY backend/ ./backend/
+COPY ingestion/ ./ingestion/
+COPY configs/ ./configs/
+
+# Create data directories (will be overridden by volume mounts in compose)
+RUN mkdir -p /data/kb /data/uploads /data/artifacts /data/models
+
+# Non-root user for security
+RUN useradd -m -u 1000 kgmag && chown -R kgmag:kgmag /app /data
+USER kgmag
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=30s --start-period=90s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["python", "-m", "uvicorn", "backend.api.main:app", \
+     "--host", "0.0.0.0", "--port", "8000", \
+     "--workers", "1", "--log-level", "info"]

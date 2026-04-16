@@ -1,0 +1,96 @@
+# ── KG-MAG — docker-compose ───────────────────────────────────────────────────
+# Run the full stack: docker compose up --build
+# Requires: .env file at project root (copy from .env.example)
+
+services:
+  # ── Backend (FastAPI) ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: kg-mag-backend:latest
+    container_name: kg-mag-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override paths to use Docker volumes
+      KNOWLEDGE_BASE_PATH: /data/kb
+      UPLOADS_PATH: /data/uploads
+      ARTIFACTS_PATH: /data/artifacts
+      FAISS_INDEX_PATH: /data/kb/faiss_index
+      ENVIRONMENT: production
+    volumes:
+      - kg_data:/data
+    ports:
+      - "8080:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s # Allow time for model loading
+    networks:
+      - kg-mag-net
+
+  # ── Frontend (Next.js) ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://127.0.0.1:8080
+    image: kg-mag-frontend:latest
+    container_name: kg-mag-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000 # internal Docker DNS
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - kg-mag-net
+
+  # ── ChromaDB (optional, use if VECTOR_DB=chroma) ──────────────────────────
+  chroma:
+    image: chromadb/chroma:0.5.23
+    container_name: kg-mag-chroma
+    restart: unless-stopped
+    profiles:
+      - chroma # Start with: docker compose --profile chroma up
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - kg-mag-net
+
+  # ── Nginx reverse proxy (production) ─────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: kg-mag-nginx
+    restart: unless-stopped
+    profiles:
+      - production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./configs/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - kg-mag-net
+
+volumes:
+  kg_data:
+    driver: local
+  chroma_data:
+    driver: local
+
+networks:
+  kg-mag-net:
+    driver: bridge
