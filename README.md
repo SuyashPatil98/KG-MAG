@@ -1,5 +1,9 @@
 # KG-MAG — Knowledge-Grounded Medium Article Generator
 
+## Demo Video
+
+[![Watch the demo](https://img.youtube.com/vi/CjslMkEpErk/maxresdefault.jpg)](https://youtu.be/CjslMkEpErk)
+
 > **Build a production-grade RAG system that generates cited, hallucination-checked articles from your own documents.**
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
