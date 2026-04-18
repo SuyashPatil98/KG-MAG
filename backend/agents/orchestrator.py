@@ -39,7 +39,6 @@ making them individually testable and swappable.
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -105,7 +104,6 @@ Focus on practical, insightful structure. Avoid fluff."""
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
         logger.info("PlannerAgent: generating outline", topic=ctx.topic)
-        cfg = get_settings()
 
         user_prompt = f"""
 Create a detailed article outline for a Medium-style article on the topic:

@@ -52,7 +52,7 @@ def cmd_ingest(directory: str, rebuild: bool = False) -> None:
     doc_count = 0
 
     print(f"\n{'─'*60}")
-    print(f"  KG-MAG Ingestion Pipeline")
+    print("  KG-MAG Ingestion Pipeline")
     print(f"  Source: {doc_dir.resolve()}")
     print(f"{'─'*60}\n")
 
@@ -112,13 +112,13 @@ def cmd_stats() -> None:
         sources.setdefault(c.filename, []).append(c)
 
     print(f"\n{'─'*60}")
-    print(f"  KG-MAG Knowledge Base Statistics")
+    print("  KG-MAG Knowledge Base Statistics")
     print(f"{'─'*60}")
     print(f"  Vector DB:       {cfg.vector_db.upper()}")
     print(f"  Embedding Model: {cfg.embedding_model}")
     print(f"  Total Vectors:   {store.total_vectors}")
     print(f"  Total Documents: {len(sources)}")
-    print(f"\n  Documents:")
+    print("\n  Documents:")
     for fname, doc_chunks in sorted(sources.items()):
         avg_len = sum(len(c.text.split()) for c in doc_chunks) // len(doc_chunks)
         print(f"    {fname:<40} {len(doc_chunks):>4} chunks  ~{avg_len} words/chunk")
@@ -146,7 +146,6 @@ def cmd_train_reranker() -> None:
 def cmd_validate_retrieval() -> None:
     """Run a set of test queries and score retrieval quality."""
     from backend.tools.vector_store import FAISSVectorStore
-    from backend.models.reranker import rerank
 
     store = FAISSVectorStore()
     if store.total_vectors == 0:
@@ -157,7 +156,7 @@ def cmd_validate_retrieval() -> None:
     chunks = store.all_chunks()[:5]
 
     print(f"\n{'─'*60}")
-    print(f"  Retrieval Quality Validation")
+    print("  Retrieval Quality Validation")
     print(f"{'─'*60}\n")
 
     total_mrr = 0.0

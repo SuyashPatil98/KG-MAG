@@ -40,12 +40,10 @@ The model is trained lazily on first call if no saved model is found.
 
 from __future__ import annotations
 
-import json
 import math
 import pickle
 import re
 from pathlib import Path
-from typing import Sequence
 
 import numpy as np
 import structlog

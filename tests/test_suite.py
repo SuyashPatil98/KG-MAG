@@ -10,12 +10,10 @@ Run:
 
 from __future__ import annotations
 
-import io
-import json
 import tempfile
 import textwrap
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -242,7 +240,6 @@ class TestVectorStore:
 
         p = temp_dir / "doc.txt"
         p.write_text(SAMPLE_TEXT)
-        from ingestion.pipeline import ingest_file
         chunks = ingest_file(p)
         added = store.add_chunks(chunks)
         assert added == len(chunks)
@@ -331,7 +328,6 @@ class TestReranker:
         """If no trained model, reranker returns original FAISS order."""
         from backend.models.reranker import rerank
         from backend.core.models import RetrievedChunk, DocumentChunk
-        from backend.core.config import get_settings
 
         # Ensure model doesn't exist
         import backend.models.reranker as rm
@@ -392,9 +388,9 @@ class TestAPI:
         """FastAPI test client with mocked dependencies."""
         from fastapi.testclient import TestClient
 
-        with patch("backend.api.main.FAISSVectorStore") as mock_vs, \
-             patch("backend.api.main.LLMClient") as mock_llm, \
-             patch("backend.api.main.ArticleOrchestrator") as mock_orch:
+           with patch("backend.api.main.FAISSVectorStore") as mock_vs, \
+               patch("backend.api.main.LLMClient"), \
+               patch("backend.api.main.ArticleOrchestrator"):
 
             mock_vs.return_value.total_vectors = 0
             mock_vs.return_value.all_chunks.return_value = []

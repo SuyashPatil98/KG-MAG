@@ -20,7 +20,6 @@ import time
 import uuid
 from pathlib import Path
 
-import structlog
 import uvicorn
 from fastapi import (
     BackgroundTasks,
@@ -33,7 +32,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
