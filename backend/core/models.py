@@ -85,7 +85,7 @@ class GeneratedArticle(BaseModel):
     tags: list[str] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
     model_used: str = ""
-    token_usage: dict[str, int] = Field(default_factory=dict)
+    token_usage: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── QA Models ────────────────────────────────────────────────────────────────
@@ -147,3 +147,80 @@ class KnowledgeBaseStatus(BaseModel):
     vector_db: str
     embedding_model: str
     last_updated: datetime | None
+
+
+class UploadedFileInfo(BaseModel):
+    stored_name: str
+    display_name: str
+    size_bytes: int
+    uploaded_at: datetime
+    chunk_count: int = 0
+    indexed: bool = False
+
+
+class UploadListResponse(BaseModel):
+    total_files: int
+    total_size_bytes: int
+    files: list[UploadedFileInfo] = Field(default_factory=list)
+
+
+class DeleteUploadsRequest(BaseModel):
+    stored_names: list[str] = Field(default_factory=list)
+
+
+class DeleteUploadsResponse(BaseModel):
+    deleted: list[str] = Field(default_factory=list)
+    not_found: list[str] = Field(default_factory=list)
+    rebuild_documents_processed: int = 0
+    rebuild_chunks_indexed: int = 0
+
+
+class ResetCorpusRequest(BaseModel):
+    delete_uploads: bool = True
+    delete_artifacts: bool = False
+
+
+class ResetCorpusResponse(BaseModel):
+    status: str
+    uploads_removed: int = 0
+    artifacts_removed: int = 0
+
+
+class RebuildCorpusResponse(BaseModel):
+    status: str
+    documents_processed: int = 0
+    chunks_indexed: int = 0
+
+
+class GenerationRunLog(BaseModel):
+    run_id: str
+    topic: str
+    status: str
+    started_at: datetime
+    duration_seconds: float = 0.0
+    generate_images: bool = True
+    run_qa: bool = True
+    stage_timings: dict[str, float] = Field(default_factory=dict)
+    token_usage: dict[str, Any] = Field(default_factory=dict)
+    image_attempted: int = 0
+    image_generated: int = 0
+    image_failed: int = 0
+    qa_passed: bool | None = None
+    qa_overall_confidence: float | None = None
+    qa_grounding_score: float | None = None
+    qa_readability_score: float | None = None
+    qa_warning_count: int = 0
+    error: str | None = None
+
+
+class DashboardMetrics(BaseModel):
+    total_runs: int
+    successful_runs: int
+    failed_runs: int
+    qa_enabled_runs: int
+    qa_passed_runs: int
+    qa_failed_runs: int
+    avg_duration_seconds: float
+    total_input_tokens: int
+    total_output_tokens: int
+    recent_runs: list[GenerationRunLog] = Field(default_factory=list)

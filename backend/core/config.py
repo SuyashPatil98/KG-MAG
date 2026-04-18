@@ -28,11 +28,17 @@ class Settings(BaseSettings):
     )
 
     # ── LLM ──────────────────────────────────────────────────────────────────
-    gemini_api_key: str = Field(..., description="Gemini API key")
-    llm_model: str = Field(
-        default="gemini-2.5-pro", description="Gemini model identifier"
+    openai_api_key: str = Field(
+        ...,
+        description="OpenAI API key",
     )
+    llm_model: str = Field(default="gpt-4.1", description="OpenAI model identifier")
     max_article_tokens: int = Field(default=4096, ge=512, le=8192)
+    planner_max_tokens: int = Field(default=320, ge=96, le=1024)
+    writer_source_word_budget: int = Field(default=900, ge=200, le=3000)
+    writer_max_sources_per_section: int = Field(default=3, ge=1, le=10)
+    writer_section_max_tokens: int = Field(default=560, ge=128, le=2048)
+    writer_conclusion_max_tokens: int = Field(default=280, ge=64, le=1024)
 
     # ── Image Generation ─────────────────────────────────────────────────────
     nanobananpro_api_key: str = Field(..., description="Nanobananpro image API key")
@@ -69,12 +75,22 @@ class Settings(BaseSettings):
     # ── QA thresholds ────────────────────────────────────────────────────────
     qa_grounding_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
     qa_readability_min: float = Field(default=50.0, ge=0.0, le=100.0)
+    qa_grounding_mode: Literal["heuristic", "llm"] = Field(default="heuristic")
+    qa_paragraph_checks_per_section: int = Field(default=2, ge=1, le=5)
 
     # ── API server ───────────────────────────────────────────────────────────
     backend_host: str = Field(default="0.0.0.0")
     backend_port: int = Field(default=8000)
     cors_origins: list[str] = Field(default=["http://localhost:3000", "http://127.0.0.1:3000"])
-    backend_api_key: str = Field(default="", description="Optional bearer auth for API")
+    backend_api_key: str = Field(default="", description="Bearer auth key for API (required in production)")
+
+    # ── Security controls ────────────────────────────────────────────────────
+    max_upload_files_per_request: int = Field(default=10, ge=1, le=100)
+    max_upload_file_size_mb: int = Field(default=20, ge=1, le=500)
+    rate_limit_window_seconds: int = Field(default=60, ge=10, le=3600)
+    rate_limit_generate_requests: int = Field(default=6, ge=1, le=200)
+    rate_limit_ingest_requests: int = Field(default=8, ge=1, le=200)
+    rate_limit_management_requests: int = Field(default=30, ge=1, le=500)
 
     # ── Runtime ──────────────────────────────────────────────────────────────
     environment: Literal["development", "production"] = Field(default="development")

@@ -47,7 +47,7 @@ KG-MAG is a **Retrieval-Augmented Generation (RAG) system** that:
 3. Uses a multi-agent AI pipeline to generate Medium-style articles
 4. Cites every claim with source chunks
 5. Runs automated quality checks (hallucination detection, readability, grounding)
-6. Generates header and section images
+6. Generates content-grounded technical diagrams inside the article body
 
 The key property: **the system cannot hallucinate facts not present in your documents**. Every paragraph is verified against source material.
 
@@ -120,7 +120,7 @@ Grounded output, citable back to your corpus
 ### Prerequisites
 
 - Docker & Docker Compose
-- API keys: Gemini + Nanobananpro
+- API keys: OpenAI + Nanobananpro
 
 ### Step 1: Clone and configure
 
@@ -133,11 +133,12 @@ cp .env.example .env
 Edit `.env` and fill in your API keys:
 
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 NANOBANANPRO_API_KEY=your_key_here
+BACKEND_API_KEY=replace_with_a_long_random_secret
 ```
 
-**That's the only configuration required.**
+`BACKEND_API_KEY` is required when running in production mode.
 
 ### Step 2: Start everything
 
@@ -148,10 +149,20 @@ docker compose up --build
 This will:
 
 - Pull dependencies and download the embedding model (~90MB, runs locally)
-- Start the FastAPI backend on port 8000
+- Start the FastAPI backend on port 8080 (host) / 8000 (container)
 - Start the Next.js frontend on port 3000
 
 Wait for the log line: `Application startup complete`.
+
+### Security Defaults
+
+- Production requires `BACKEND_API_KEY` (all `/api/*` endpoints enforce bearer auth).
+- Browser requests are proxied through Next.js route handlers, so the backend key stays server-side.
+- Abuse controls are enabled by default:
+  - `RATE_LIMIT_GENERATE_REQUESTS=6` per `RATE_LIMIT_WINDOW_SECONDS=60`
+  - `RATE_LIMIT_INGEST_REQUESTS=8` per `RATE_LIMIT_WINDOW_SECONDS=60`
+  - `MAX_UPLOAD_FILES_PER_REQUEST=10`
+  - `MAX_UPLOAD_FILE_SIZE_MB=20`
 
 ### Step 3: Add your documents
 
@@ -169,7 +180,8 @@ In the UI, enter a topic related to your documents and click **Generate Article*
 Or via API:
 
 ```bash
-curl -X POST http://localhost:8000/api/generate \
+curl -X POST http://localhost:8080/api/generate \
+  -H "Authorization: Bearer <your_backend_api_key>" \
   -H "Content-Type: application/json" \
   -d '{"topic": "The evolution of attention mechanisms in NLP"}'
 ```
@@ -196,7 +208,7 @@ kg-mag/
 │   ├── tools/
 │   │   ├── embedding.py        # Sentence-transformers wrapper
 │   │   ├── vector_store.py     # FAISS persistent vector store
-│   │   ├── llm_client.py       # Gemini API wrapper
+│   │   ├── llm_client.py       # OpenAI API wrapper
 │   │   └── image_gen.py        # Nanobananpro image generation
 │   └── requirements.txt
 ├── frontend/
@@ -222,14 +234,14 @@ kg-mag/
 
 ### Technology Choices and Why
 
-| Component  | Technology            | Why                                          |
-| ---------- | --------------------- | -------------------------------------------- |
-| LLM        | Google Gemini         | Strong structured output and quality writing |
-| Embeddings | sentence-transformers | Free, runs locally, high quality             |
-| Vector DB  | FAISS                 | No external service needed, deterministic    |
-| Backend    | FastAPI               | Async, auto-docs, typed, production-ready    |
-| Frontend   | Next.js 15            | App Router, Vercel-native, type-safe         |
-| ML         | scikit-learn GBM      | Interpretable, fast, no GPU needed           |
+| Component  | Technology            | Why                                             |
+| ---------- | --------------------- | ----------------------------------------------- |
+| LLM        | OpenAI GPT models     | Strong technical writing and structured outputs |
+| Embeddings | sentence-transformers | Free, runs locally, high quality                |
+| Vector DB  | FAISS                 | No external service needed, deterministic       |
+| Backend    | FastAPI               | Async, auto-docs, typed, production-ready       |
+| Frontend   | Next.js 15            | App Router, Vercel-native, type-safe            |
+| ML         | scikit-learn GBM      | Interpretable, fast, no GPU needed              |
 
 ---
 
@@ -444,11 +456,13 @@ LLMs hallucinate. Even with RAG, a model can:
 ### KG-MAG's 4-Layer Defense
 
 **Layer 1: Grounding Verification**
-For each paragraph, we ask the model to verify: "Is this claim supported by the provided source material?"
-We sample 2 paragraphs per section (not every sentence — too expensive) to check coverage.
+Default mode is token-efficient heuristic grounding (`QA_GROUNDING_MODE=heuristic`):
+paragraphs are treated as grounded when they include valid inline citations mapped to retrieved chunks.
+Optional strict mode (`QA_GROUNDING_MODE=llm`) uses model-based grounding checks.
 
 **Layer 2: Self-Consistency Check**
-Regenerate the introduction with temperature=0.7, then compute semantic similarity to the original. High similarity (>0.7) means stable, consistent generation. Low similarity suggests the model is uncertain.
+Token-free consistency uses local embeddings to measure semantic continuity between adjacent sections,
+then blends citation density as a grounded coherence signal.
 
 **Layer 3: Flesch Readability Score**
 Measures reading ease (0–100). Academic/dense text scores low. We target ≥50 (standard reading level).
@@ -481,25 +495,24 @@ Low coverage = the writer may have drifted from the source material.
 
 ## 10. Image Generation
 
-The `ImageGenerationTool` calls Nanobananpro API with crafted prompts:
+The `ImageGenerationTool` generates publication-style technical visuals and supports:
 
-**Header image prompt:**
+- Nanobananpro-style image APIs
+- Google Generative Language `generateContent` image responses (`inlineData`)
 
-```
-"A stunning, professional hero image for a Medium article about '{topic}'.
-Style: high-quality editorial photography or digital illustration.
-Clean, modern, no text overlays. Wide aspect ratio (16:9)."
-```
+Current default behavior is intentionally cost-aware and article-grounded:
 
-**Section image prompt:**
+- Generate one primary diagram at 1024x576 (16:9, 1k)
+- Ground the prompt using section headings plus distilled retrieval evidence
+- Prioritize relevance to article mechanisms over generic visuals
+- Attach the generated image to the first article section (not page header)
+- Keep image generation optional so article generation never blocks on image failures
 
-```
-"An illustrative image for the section '{heading}' in an article about '{topic}'.
-Style: clean infographic or conceptual illustration. No text."
-```
+Frontend rendering behavior:
 
-Images are generated concurrently (asyncio tasks) to minimize latency.
-If image generation fails, the article pipeline continues — images are optional.
+- Displays the in-article diagram in a 16:9 container (`aspect-video`) with full visibility (`object-contain`)
+- Provides a per-image "Download image" action in the article preview
+- Includes section images in markdown export
 
 ---
 
@@ -568,11 +581,11 @@ After deployment, note your backend URL: `https://kg-mag-backend.railway.app`
 # Install Vercel CLI
 npm i -g vercel
 
-# Create secrets (don't use raw strings for sensitive values)
-vercel env add NEXT_PUBLIC_API_URL production
+# Create server-side secrets
+vercel env add BACKEND_INTERNAL_URL production
 # Enter: https://kg-mag-backend.railway.app
 
-vercel env add NEXT_PUBLIC_BACKEND_API_KEY production
+vercel env add BACKEND_API_KEY production
 # Enter: your_backend_api_key
 ```
 
@@ -597,12 +610,12 @@ CORS_ORIGINS=http://localhost:3000,https://kg-mag.vercel.app
 
 ### Environment Variables Reference
 
-| Variable                      | Where   | Description          |
-| ----------------------------- | ------- | -------------------- |
-| `NEXT_PUBLIC_API_URL`         | Vercel  | Backend base URL     |
-| `NEXT_PUBLIC_BACKEND_API_KEY` | Vercel  | Optional API auth    |
-| `GEMINI_API_KEY`              | Backend | Gemini API key       |
-| `NANOBANANPRO_API_KEY`        | Backend | Image generation key |
+| Variable               | Where              | Description                                                 |
+| ---------------------- | ------------------ | ----------------------------------------------------------- |
+| `BACKEND_INTERNAL_URL` | Frontend server    | Backend base URL used by Next.js proxy route handlers       |
+| `BACKEND_API_KEY`      | Frontend + Backend | Shared backend bearer key (never expose as `NEXT_PUBLIC_*`) |
+| `OPENAI_API_KEY`       | Backend            | OpenAI API key                                              |
+| `NANOBANANPRO_API_KEY` | Backend            | Image generation key                                        |
 
 ---
 
@@ -853,6 +866,8 @@ If the QA report shows low grounding score:
 
 ## 17. API Reference
 
+When running via Docker Compose, use backend base URL: `http://localhost:8080`.
+
 ### POST `/api/ingest`
 
 Upload documents to the knowledge base.
@@ -893,6 +908,42 @@ Generate a grounded article.
 ### GET `/api/kb/status`
 
 Returns knowledge base statistics.
+
+### GET `/api/uploads`
+
+Lists uploaded files with size, upload time, chunk count, and indexing status.
+
+### POST `/api/uploads/delete`
+
+Deletes selected uploaded files and rebuilds the index from remaining uploads.
+
+### POST `/api/kb/rebuild`
+
+Rebuilds vector index from uploaded documents.
+
+### POST `/api/kb/reset`
+
+Resets corpus state, with options to delete uploads and generated artifacts.
+
+### GET `/api/dashboard/metrics`
+
+Returns aggregate generation telemetry including duration, token usage, image counts, and QA pass/fail metrics.
+
+### GET `/api/dashboard/logs`
+
+Returns recent generation runs with stage timings and QA/image summaries.
+
+### GET `/api/article/{article_id}`
+
+Fetches a previously generated article by ID.
+
+### GET `/api/articles`
+
+Lists generated article IDs and titles.
+
+### DELETE `/api/kb/clear`
+
+Clears vector index and in-memory generated artifacts metadata.
 
 ### GET `/health`
 

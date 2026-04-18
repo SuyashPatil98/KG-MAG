@@ -174,6 +174,42 @@ class TestIngestion:
         ids = [c.chunk_id for c in chunks]
         assert len(ids) == len(set(ids)), "Chunk IDs must be unique"
 
+    def test_heading_only_document_still_chunks(self, temp_dir):
+        from ingestion.pipeline import ingest_file
+
+        p = temp_dir / "caps_headings.txt"
+        p.write_text(
+            "INTRODUCTION\n\nSYSTEM OVERVIEW\n\nIMPLEMENTATION DETAILS\n\nCONCLUSION"
+        )
+
+        chunks = ingest_file(p)
+        assert len(chunks) >= 1
+        assert any("INTRODUCTION" in c.text for c in chunks)
+
+    def test_contextual_heading_is_retained(self, temp_dir):
+        from ingestion.pipeline import ingest_file
+
+        p = temp_dir / "contextual.md"
+        p.write_text(
+            "# Design Decisions\n\nWe compare index rebuild strategies for resilient retrieval."
+        )
+
+        chunks = ingest_file(p)
+        assert len(chunks) >= 1
+        assert chunks[0].heading is not None
+        assert "Design Decisions" in chunks[0].text
+
+    def test_overlap_greater_than_chunk_size_is_safe(self, temp_dir):
+        from ingestion.pipeline import chunk_document, extract_markdown
+
+        p = temp_dir / "overlap_edge.md"
+        words = " ".join(f"token{i}" for i in range(250))
+        p.write_text(f"# Edge Case\n\n{words}")
+
+        text, meta = extract_markdown(p)
+        chunks = chunk_document(text, meta, chunk_size=40, overlap=200)
+        assert len(chunks) >= 1
+
     def test_deterministic_chunk_ids(self, sample_md_file):
         """Same file → same chunk IDs (important for deduplication)."""
         from ingestion.pipeline import ingest_file

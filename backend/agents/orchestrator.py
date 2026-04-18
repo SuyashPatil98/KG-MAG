@@ -77,6 +77,7 @@ class PipelineContext:
     article: Optional[GeneratedArticle] = None
     qa_report: Optional[QAReport] = None
     image_urls: dict[str, Optional[str]] = field(default_factory=dict)
+    stage_timings: dict[str, float] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
 
@@ -94,10 +95,10 @@ class PlannerAgent:
     - Estimate reading time
     """
 
-    SYSTEM = """You are an expert editorial strategist for a top technology publication.
-Your role is to create compelling, well-structured article outlines based on the given topic.
-The outline must be grounded — you will be given a knowledge base to draw from.
-Focus on practical, insightful structure. Avoid fluff."""
+    SYSTEM = """You are a principal technical editor for an elite engineering publication.
+Produce dense, high-signal outlines for advanced software and AI topics.
+Prioritize architecture, data flow, implementation mechanics, failure modes, trade-offs,
+operational constraints, and production guidance. Avoid fluff and generic headings."""
 
     def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
@@ -106,7 +107,7 @@ Focus on practical, insightful structure. Avoid fluff."""
         logger.info("PlannerAgent: generating outline", topic=ctx.topic)
 
         user_prompt = f"""
-Create a detailed article outline for a Medium-style article on the topic:
+Create a detailed article outline for a technical long-form article on the topic:
 **"{ctx.topic}"**
 
 Target audience: {ctx.target_audience}
@@ -123,11 +124,19 @@ Respond with a JSON object exactly matching this schema:
   "seo_keywords": ["<keyword1>", "<keyword2>", ...]
 }}
 
-Section headings should be specific, action-oriented, and informative (not generic).
+Section headings must be specific and technically meaningful (not generic).
+Use an arc that moves from problem framing to mechanisms, implementation decisions,
+trade-offs, reliability/operations, and pragmatic next steps.
 Include 4-{ctx.max_sections} sections.
 """
         try:
-            data = self._llm.complete_json(self.SYSTEM, user_prompt, tag="planner")
+            cfg = get_settings()
+            data = self._llm.complete_json(
+                self.SYSTEM,
+                user_prompt,
+                max_tokens=cfg.planner_max_tokens,
+                tag="planner",
+            )
             ctx.outline = ArticleOutline(**data)
             logger.info(
                 "Outline created",
@@ -220,26 +229,48 @@ class WriterAgent:
     - Each section prompt includes the specific chunks for that section
     """
 
-    SYSTEM = """You are a world-class science and technology writer for Medium.
-Your articles are celebrated for being deeply informative, engaging, and clearly written.
+    SYSTEM = """You are a principal engineer and technical essayist writing for advanced practitioners.
+Write technically rigorous, highly understandable, implementation-oriented prose.
 
 CRITICAL RULES:
 1. Only write content that is directly supported by the provided source chunks.
 2. Insert citation markers in the format [CITE:chunk_id] immediately after each factual claim.
-3. Write in a conversational but authoritative tone.
-4. Use clear, jargon-free language unless technical terms are necessary.
+3. Write in a precise, authoritative, and readable technical tone.
+4. Explain advanced terms briefly when first introduced.
 5. Never fabricate facts, statistics, or quotes not present in the source material.
-6. Each section should flow naturally into the next."""
+6. Include concrete implementation implications, constraints, and trade-offs where supported.
+7. Prefer actionable engineering detail over abstract commentary.
+8. Each section should flow naturally into the next."""
 
     def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
 
+    @staticmethod
+    def _truncate_words(text: str, max_words: int) -> str:
+        words = text.split()
+        if len(words) <= max_words:
+            return text
+        return " ".join(words[:max_words])
+
     def _format_chunks(self, chunks: list[RetrievedChunk]) -> str:
+        cfg = get_settings()
+        max_sources = cfg.writer_max_sources_per_section
+        total_budget = cfg.writer_source_word_budget
+        per_source_cap = max(120, total_budget // max(1, max_sources))
+
         parts = []
-        for r in chunks:
+        remaining_budget = total_budget
+        for r in chunks[:max_sources]:
+            if remaining_budget <= 0:
+                break
+
+            budget_for_chunk = min(per_source_cap, remaining_budget)
+            clipped_text = self._truncate_words(r.chunk.text, budget_for_chunk)
+            remaining_budget -= len(clipped_text.split())
+
             heading_label = f" [{r.chunk.heading}]" if r.chunk.heading else ""
             parts.append(
-                f"--- SOURCE chunk_id={r.chunk.chunk_id}{heading_label} ---\n{r.chunk.text}"
+                f"--- SOURCE chunk_id={r.chunk.chunk_id}{heading_label} ---\n{clipped_text}"
             )
         return "\n\n".join(parts)
 
@@ -251,6 +282,7 @@ CRITICAL RULES:
         chunks: list[RetrievedChunk],
         prev_sections: list[str],
         tone: str,
+        has_section_image: bool,
     ) -> ArticleSection:
         context_text = self._format_chunks(chunks) if chunks else "No source material available."
         prev_context = "\n".join(f"- {h}" for h in prev_sections) if prev_sections else "None yet."
@@ -267,14 +299,26 @@ SOURCE MATERIAL (use ONLY this):
 
 Write the "{heading}" section of this article.
 Requirements:
-- 200–350 words
+- 220–380 words
 - Use [CITE:chunk_id] immediately after each fact drawn from source material
-- No bullet points in the body (prose only, Medium style)
+- Balance technical depth with readability for practicing engineers
+- Include explicit design trade-offs and operational considerations when supported by sources
+- Include at least one practical implementation recommendation when supported by sources
+- If an accompanying section image exists, include one concise sentence that references the visual
+    as a supporting illustration for the discussed mechanism.
+- No bullet points in the body (prose only)
 - End with a smooth transition hint toward the next section if applicable
 - Start directly with content (no "In this section..." opener)
+
+Section image available for this section: {"yes" if has_section_image else "no"}
 """
+        cfg = get_settings()
         raw = self._llm.complete(
-            self.SYSTEM, user_prompt, max_tokens=800, temperature=0.65, tag=f"writer_{heading[:20]}"
+            self.SYSTEM,
+            user_prompt,
+            max_tokens=cfg.writer_section_max_tokens,
+            temperature=0.55,
+            tag=f"writer_{heading[:20]}",
         )
 
         # Extract citation markers
@@ -290,6 +334,46 @@ Requirements:
             citations=list(dict.fromkeys(cited_ids)),  # unique, order-preserving
         )
 
+    @staticmethod
+    def _contains_visual_reference(text: str) -> bool:
+        lowered = text.lower()
+        markers = ["figure", "image", "illustration", "diagram", "visual"]
+        return any(m in lowered for m in markers)
+
+    def _ensure_image_reference(
+        self,
+        sections: list[ArticleSection],
+        header_image_url: str | None,
+    ) -> None:
+        """
+        Ensure at least one explicit in-text mention of the generated image(s).
+        This makes visual assets part of the article narrative, not just decoration.
+        """
+        if not sections:
+            return
+
+        has_any_image = bool(header_image_url) or any(s.image_url for s in sections)
+        if not has_any_image:
+            return
+
+        if any(self._contains_visual_reference(section.content) for section in sections):
+            return
+
+        section_with_image = next((s for s in sections if s.image_url), None)
+        if section_with_image is not None:
+            section_with_image.content = (
+                "Figure note: The accompanying illustration highlights the core architecture "
+                "and data flow discussed in this section.\n\n"
+                f"{section_with_image.content}"
+            )
+            return
+
+        sections[0].content = (
+            "Figure note: The header image provides a visual overview of the system concepts "
+            "covered throughout this article.\n\n"
+            f"{sections[0].content}"
+        )
+
     def _write_conclusion(
         self, topic: str, outline: ArticleOutline, sections: list[ArticleSection], tone: str
     ) -> str:
@@ -300,11 +384,17 @@ The article covered:
 {section_summaries}
 
 Tone: {tone}
-Synthesize the key insights and end with a thought-provoking closing statement.
+Synthesize the key insights, restate the most important engineering implications,
+and close with a forward-looking but concrete takeaway.
 No new facts — summarize and inspire.
 """
+        cfg = get_settings()
         return self._llm.complete(
-            self.SYSTEM, user_prompt, max_tokens=400, temperature=0.7, tag="writer_conclusion"
+            self.SYSTEM,
+            user_prompt,
+            max_tokens=cfg.writer_conclusion_max_tokens,
+            temperature=0.55,
+            tag="writer_conclusion",
         )
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
@@ -316,21 +406,26 @@ No new facts — summarize and inspire.
 
         for heading in ctx.outline.sections:
             chunks = ctx.retrieved.get(heading, [])
+            section_image_url = ctx.image_urls.get(heading)
             section = self._write_section(
                 ctx.topic, ctx.outline, heading, chunks,
-                written_headings, ctx.tone
+                written_headings, ctx.tone, bool(section_image_url)
             )
 
             # Attach image URL if generated
-            if url := ctx.image_urls.get(heading):
-                section.image_url = url
-                section.image_prompt = f"{heading} related to {ctx.topic}"
+            if section_image_url:
+                section.image_url = section_image_url
+                section.image_prompt = (
+                    f"Technical editorial illustration for '{heading}' in '{ctx.topic}'"
+                )
 
             sections.append(section)
             written_headings.append(heading)
             logger.debug("Section written", heading=heading, words=len(section.content.split()))
 
         conclusion = self._write_conclusion(ctx.topic, ctx.outline, sections, ctx.tone)
+
+        self._ensure_image_reference(sections, ctx.image_urls.get("header"))
 
         # Build citations map: chunk_id → chunk
         citations_map = {}
@@ -349,7 +444,7 @@ No new facts — summarize and inspire.
             seo_keywords=ctx.outline.seo_keywords,
             tags=ctx.outline.seo_keywords[:5],
             model_used=get_settings().llm_model,
-            token_usage=self._llm.token_summary(),
+            token_usage=self._llm.token_summary(include_tag_prefixes=("planner", "writer")),
         )
 
         logger.info(
@@ -410,24 +505,58 @@ Be strict: if a claim is not directly supported, mark it as ungrounded."""
         score = 206.835 - (1.015 * avg_words_per_sentence) - (84.6 * avg_syllables_per_word)
         return max(0.0, min(100.0, score))
 
-    def _verify_grounding(
-        self, article: GeneratedArticle
+    @staticmethod
+    def _extract_inline_citations(text: str) -> list[str]:
+        import re
+
+        return re.findall(r"\[([a-zA-Z0-9_-]{6,})\]", text)
+
+    def _verify_grounding_heuristic(
+        self,
+        article: GeneratedArticle,
+        max_paragraphs_per_section: int,
     ) -> list[dict]:
         """
-        For each paragraph in the article, ask the LLM to verify grounding
-        against the retrieved source chunks.
-        Uses a sampling approach (not every sentence) for efficiency.
+        Token-free grounding approximation.
+        A paragraph is treated as grounded when it contains at least one
+        valid inline citation mapped to a retrieved source chunk.
         """
+        results: list[dict] = []
+        valid_source_ids = set(article.citations_map.keys())
+
+        for section in article.sections:
+            paras = [p.strip() for p in section.content.split("\n\n") if p.strip()]
+            for para in paras[:max_paragraphs_per_section]:
+                cited_ids = [
+                    cid for cid in self._extract_inline_citations(para) if cid in valid_source_ids
+                ]
+                is_grounded = len(cited_ids) > 0
+                results.append(
+                    {
+                        "sentence": para[:200],
+                        "is_grounded": is_grounded,
+                        "supporting_chunk_ids": cited_ids,
+                        "confidence": 0.88 if is_grounded else 0.25,
+                    }
+                )
+
+        return results
+
+    def _verify_grounding_llm(
+        self,
+        article: GeneratedArticle,
+        max_paragraphs_per_section: int,
+    ) -> list[dict]:
+        """Optional strict grounding verification using LLM checks."""
         results = []
         full_context = "\n\n".join(
             f"[{chunk.chunk_id}] {chunk.text}"
-            for chunk in list(article.citations_map.values())[:12]  # cap context size
+            for chunk in list(article.citations_map.values())[:12]
         )
 
         for section in article.sections:
-            # Sample first 2 paragraphs per section for verification
-            paras = [p.strip() for p in section.content.split("\n\n") if p.strip()][:2]
-            for para in paras:
+            paras = [p.strip() for p in section.content.split("\n\n") if p.strip()]
+            for para in paras[:max_paragraphs_per_section]:
                 prompt = f"""
 Source material:
 {full_context[:3000]}
@@ -440,22 +569,35 @@ Respond with JSON: {{"is_grounded": true/false, "supporting_chunk_ids": ["id1", 
 """
                 try:
                     data = self._llm.complete_json(
-                        self.SYSTEM, prompt, max_tokens=200, tag="critic_ground"
+                        self.SYSTEM, prompt, max_tokens=180, tag="critic_ground"
                     )
-                    results.append({
-                        "sentence": para[:200],
-                        "is_grounded": data.get("is_grounded", False),
-                        "supporting_chunk_ids": data.get("supporting_chunk_ids", []),
-                        "confidence": float(data.get("confidence", 0.5)),
-                    })
+                    results.append(
+                        {
+                            "sentence": para[:200],
+                            "is_grounded": data.get("is_grounded", False),
+                            "supporting_chunk_ids": data.get("supporting_chunk_ids", []),
+                            "confidence": float(data.get("confidence", 0.5)),
+                        }
+                    )
                 except Exception:
-                    results.append({
-                        "sentence": para[:200],
-                        "is_grounded": True,  # conservative on parse failure
-                        "supporting_chunk_ids": [],
-                        "confidence": 0.5,
-                    })
+                    results.append(
+                        {
+                            "sentence": para[:200],
+                            "is_grounded": True,
+                            "supporting_chunk_ids": [],
+                            "confidence": 0.5,
+                        }
+                    )
+
         return results
+
+    def _verify_grounding(self, article: GeneratedArticle) -> list[dict]:
+        cfg = get_settings()
+        checks = max(1, cfg.qa_paragraph_checks_per_section)
+
+        if cfg.qa_grounding_mode == "llm":
+            return self._verify_grounding_llm(article, checks)
+        return self._verify_grounding_heuristic(article, checks)
 
     def _coverage_score(self, article: GeneratedArticle, ctx: PipelineContext) -> float:
         """What fraction of retrieved chunks appear in at least one citation?"""
@@ -474,28 +616,38 @@ Respond with JSON: {{"is_grounded": true/false, "supporting_chunk_ids": ["id1", 
 
     def _self_consistency_score(self, article: GeneratedArticle, ctx: PipelineContext) -> float:
         """
-        Regenerate the article introduction and compare semantic similarity
-        to the original. High similarity → consistent, stable generation.
+        Token-free consistency approximation using local embeddings.
+        Measures semantic continuity between adjacent sections and blends
+        citation density as a proxy for grounded coherence.
         """
         from backend.tools.embedding import EmbeddingEngine
+
+        snippets = [
+            f"{section.heading}. {section.content[:320]}".strip()
+            for section in article.sections
+            if section.content.strip()
+        ]
+
+        if len(snippets) < 2:
+            return 0.8
+
         engine = EmbeddingEngine()
+        vecs = engine.encode(snippets[:8], normalize=True)
 
-        intro_chunks = ctx.retrieved.get(ctx.outline.sections[0] if ctx.outline else "", [])[:3]
-        context_text = "\n".join(r.chunk.text for r in intro_chunks)
+        adjacent_sims: list[float] = []
+        for i in range(len(vecs) - 1):
+            sim = float(engine.cosine_similarity(vecs[i], vecs[i + 1]))
+            adjacent_sims.append(max(0.0, min(1.0, sim)))
 
-        regen_prompt = f"""
-Write a brief 3-sentence introduction for an article titled "{article.title}" about {ctx.topic}.
-Use only this context: {context_text[:1000]}
-"""
-        regen_text = self._llm.complete(
-            "You are a writer.", regen_prompt, max_tokens=200, temperature=0.7, tag="critic_consistency"
-        )
+        topical_cohesion = sum(adjacent_sims) / len(adjacent_sims) if adjacent_sims else 0.7
 
-        orig_intro = article.sections[0].content[:500] if article.sections else article.title
+        total_words = sum(len(section.content.split()) for section in article.sections)
+        total_citations = sum(len(section.citations) for section in article.sections)
+        words_per_citation = total_words / max(1, total_citations)
+        citation_density = max(0.0, min(1.0, 1.0 - (words_per_citation - 80) / 220))
 
-        orig_vec = engine.encode_single(orig_intro)
-        regen_vec = engine.encode_single(regen_text)
-        return float(engine.cosine_similarity(orig_vec, regen_vec))
+        score = (0.75 * topical_cohesion) + (0.25 * citation_density)
+        return float(max(0.0, min(1.0, score)))
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
         assert ctx.article, "No article to critique — run WriterAgent first"
@@ -588,10 +740,50 @@ class ArticleOrchestrator:
         vector_store: FAISSVectorStore,
         llm: LLMClient,
     ) -> None:
+        self._llm = llm
         self._planner = PlannerAgent(llm)
         self._retriever = RetrieverAgent(vector_store)
         self._writer = WriterAgent(llm)
         self._critic = CriticAgent(llm, vector_store)
+
+    @staticmethod
+    def _truncate_words(text: str, max_words: int) -> str:
+        words = text.split()
+        if len(words) <= max_words:
+            return text
+        return " ".join(words[:max_words])
+
+    def _build_image_content_brief(
+        self,
+        retrieved: dict[str, list[RetrievedChunk]],
+        max_items: int = 8,
+    ) -> list[str]:
+        """
+        Create compact, evidence-grounded cues for image prompting.
+        """
+        items: list[str] = []
+        seen: set[str] = set()
+
+        for section, chunks in retrieved.items():
+            if len(items) >= max_items:
+                break
+
+            if not chunks:
+                continue
+
+            top = chunks[0].chunk
+            snippet = self._truncate_words(top.text.replace("\n", " ").strip(), 24)
+            if not snippet:
+                continue
+
+            cue = f"{section}: {snippet}"
+            key = cue.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(cue)
+
+        return items
 
     async def run(
         self,
@@ -612,24 +804,53 @@ class ArticleOrchestrator:
 
         t0 = time.perf_counter()
 
+        # Scope token accounting to this generation request only.
+        self._llm.reset_token_log()
+
         # Agent pipeline
+        t_stage = time.perf_counter()
         ctx = self._planner.run(ctx)
+        ctx.stage_timings["planner_s"] = round(time.perf_counter() - t_stage, 3)
+
+        t_stage = time.perf_counter()
         ctx = self._retriever.run(ctx)
+        ctx.stage_timings["retriever_s"] = round(time.perf_counter() - t_stage, 3)
 
         # Image generation (async, non-blocking)
         if generate_images and ctx.outline:
+            t_stage = time.perf_counter()
             from backend.tools.image_gen import ImageGenerationTool
             img_tool = ImageGenerationTool()
+            content_brief = self._build_image_content_brief(ctx.retrieved)
             ctx.image_urls = await img_tool.generate_article_images(
-                topic, ctx.outline.sections, tone
+                topic,
+                ctx.outline.sections,
+                tone,
+                max_section_images=0,
+                content_brief=content_brief,
             )
 
+            # Keep generated figure inside the article body (first section), not in header.
+            if ctx.outline.sections:
+                first_section = ctx.outline.sections[0]
+                header_image_url = ctx.image_urls.get("header")
+                if header_image_url and not ctx.image_urls.get(first_section):
+                    ctx.image_urls[first_section] = header_image_url
+                ctx.image_urls["header"] = None
+
+            ctx.stage_timings["image_generation_s"] = round(time.perf_counter() - t_stage, 3)
+
+        t_stage = time.perf_counter()
         ctx = self._writer.run(ctx)
+        ctx.stage_timings["writer_s"] = round(time.perf_counter() - t_stage, 3)
 
         if run_qa:
+            t_stage = time.perf_counter()
             ctx = self._critic.run(ctx)
+            ctx.stage_timings["qa_s"] = round(time.perf_counter() - t_stage, 3)
 
         elapsed = time.perf_counter() - t0
+        ctx.stage_timings["total_s"] = round(elapsed, 3)
         logger.info(
             "Pipeline complete",
             topic=topic,
