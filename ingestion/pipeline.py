@@ -23,7 +23,6 @@ Design notes
 from __future__ import annotations
 
 import hashlib
-import io
 import re
 import unicodedata
 from pathlib import Path

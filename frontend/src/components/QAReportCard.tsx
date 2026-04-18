@@ -26,7 +26,6 @@ function ScoreBar({ label, score, max = 1, color }: { label: string; score: numb
 
 export default function QAReportCard({ report }: Props) {
   const confidence = Math.round(report.overall_confidence * 100);
-  const passColor = report.passed ? "#22c55e" : "#ef4444";
 
   return (
     <div className={`bg-[#12121f] border rounded-lg p-5 ${report.passed ? "border-green-900/50" : "border-red-900/50"}`}>

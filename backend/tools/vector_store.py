@@ -23,7 +23,7 @@ import json
 import pickle
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import structlog
@@ -82,7 +82,7 @@ class FAISSVectorStore:
 
     # ── Construction helpers ──────────────────────────────────────────────────
 
-    def _empty_index(self) -> "faiss.IndexIDMap2":
+    def _empty_index(self) -> Any:
         flat = self._faiss.IndexFlatIP(self._dim)
         return self._faiss.IndexIDMap2(flat)
 
