@@ -17,9 +17,9 @@ function getBackendApiKey(): string {
 
 export async function GET(
   _request: NextRequest,
-  context: { params: { filename: string } },
+  { params }: { params: Promise<{ filename: string }> },
 ): Promise<NextResponse> {
-  const filename = context.params.filename ?? "";
+  const { filename = "" } = await params;
   if (!filename || !SAFE_FILENAME_RE.test(filename)) {
     return NextResponse.json(
       { detail: "Invalid artifact name" },

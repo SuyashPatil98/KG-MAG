@@ -13,12 +13,6 @@ const ALLOWED_METHODS = new Set([
   "HEAD",
 ]);
 
-type RouteContext = {
-  params: {
-    path?: string[];
-  };
-};
-
 function getBackendBaseUrl(): string {
   const value = process.env.BACKEND_INTERNAL_URL ?? FALLBACK_BACKEND_URL;
   return value.replace(/\/+$/, "");
@@ -37,7 +31,7 @@ function buildTargetUrl(request: NextRequest, pathParts: string[]): string {
 
 async function proxyRequest(
   request: NextRequest,
-  context: RouteContext,
+  pathParts: string[],
 ): Promise<NextResponse> {
   if (!ALLOWED_METHODS.has(request.method)) {
     return NextResponse.json(
@@ -46,7 +40,6 @@ async function proxyRequest(
     );
   }
 
-  const pathParts = context.params.path ?? [];
   if (pathParts.length === 0) {
     return NextResponse.json(
       { detail: "Missing upstream API path" },
@@ -106,30 +99,58 @@ async function proxyRequest(
   }
 }
 
-export async function GET(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }
 
-export async function PUT(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }
 
-export async function OPTIONS(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+export async function OPTIONS(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }
 
-export async function HEAD(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+export async function HEAD(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }

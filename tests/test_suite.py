@@ -424,9 +424,9 @@ class TestAPI:
         """FastAPI test client with mocked dependencies."""
         from fastapi.testclient import TestClient
 
-           with patch("backend.api.main.FAISSVectorStore") as mock_vs, \
-               patch("backend.api.main.LLMClient"), \
-               patch("backend.api.main.ArticleOrchestrator"):
+        with patch("backend.api.main.FAISSVectorStore") as mock_vs, \
+            patch("backend.api.main.LLMClient"), \
+            patch("backend.api.main.ArticleOrchestrator"):
 
             mock_vs.return_value.total_vectors = 0
             mock_vs.return_value.all_chunks.return_value = []
