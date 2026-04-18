@@ -29,8 +29,8 @@ class Settings(BaseSettings):
 
     # ── LLM ──────────────────────────────────────────────────────────────────
     openai_api_key: str = Field(
-        ...,
-        description="OpenAI API key",
+        default="",
+        description="OpenAI API key (optional in dev/tests)",
     )
     llm_model: str = Field(default="gpt-4.1", description="OpenAI model identifier")
     max_article_tokens: int = Field(default=4096, ge=512, le=8192)
@@ -41,7 +41,10 @@ class Settings(BaseSettings):
     writer_conclusion_max_tokens: int = Field(default=280, ge=64, le=1024)
 
     # ── Image Generation ─────────────────────────────────────────────────────
-    nanobananpro_api_key: str = Field(..., description="Nanobananpro image API key")
+    nanobananpro_api_key: str = Field(
+        default="",
+        description="Nanobananpro image API key (optional in dev/tests)",
+    )
     nanobananpro_api_url: AnyHttpUrl = Field(
         default="https://api.nanobananpro.com/v1/generate"
     )
