@@ -458,9 +458,12 @@ def chunk_document(
         if not chunk_text:
             continue
 
-        # Deterministic chunk_id based on content hash
+        # Deterministic chunk_id based on stable document metadata + chunk content.
         content_hash = hashlib.sha256(
-            f"{meta.source_id}:{idx}:{chunk_text[:64]}".encode()
+            (
+                f"{meta.filename}:{meta.title or ''}:{meta.word_count or 0}:"
+                f"{idx}:{heading or ''}:{chunk_text}"
+            ).encode("utf-8")
         ).hexdigest()[:16]
 
         chunks.append(
@@ -480,7 +483,10 @@ def chunk_document(
     if not chunks and text.strip():
         # Last-resort guardrail: always emit at least one chunk for non-empty text.
         content_hash = hashlib.sha256(
-            f"{meta.source_id}:0:{text[:64]}".encode()
+            (
+                f"{meta.filename}:{meta.title or ''}:{meta.word_count or 0}:"
+                f"0::{text.strip()}"
+            ).encode("utf-8")
         ).hexdigest()[:16]
         chunks.append(
             DocumentChunk(
