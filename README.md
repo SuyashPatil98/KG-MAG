@@ -7,6 +7,12 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+## Demo Video
+
+[![Watch the demo](https://img.youtube.com/vi/CjslMkEpErk/hqdefault.jpg)](https://youtu.be/CjslMkEpErk)
+
+End-to-end demo of KG-MAG ingestion, indexing, retrieval, and article generation.
+
 ---
 
 ## Table of Contents
@@ -28,6 +34,7 @@
 15. [Common Mistakes & Best Practices](#15-common-mistakes--best-practices)
 16. [Testing & Debugging](#16-testing--debugging)
 17. [API Reference](#17-api-reference)
+18. [Future Direction: Cloud Deployment](#18-future-direction-cloud-deployment)
 
 ---
 
@@ -113,20 +120,20 @@ Grounded output, citable back to your corpus
 ### Prerequisites
 
 - Docker & Docker Compose
-- API keys: Anthropic (Claude) + Nanobananpro
+- API keys: Gemini + Nanobananpro
 
 ### Step 1: Clone and configure
 
 ```bash
-git clone https://github.com/yourname/kg-mag.git
-cd kg-mag
+git clone https://github.com/SuyashPatil98/KG-MAG.git
+cd KG-MAG
 cp .env.example .env
 ```
 
 Edit `.env` and fill in your API keys:
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=your_gemini_api_key_here
 NANOBANANPRO_API_KEY=your_key_here
 ```
 
@@ -139,6 +146,7 @@ docker compose up --build
 ```
 
 This will:
+
 - Pull dependencies and download the embedding model (~90MB, runs locally)
 - Start the FastAPI backend on port 8000
 - Start the Next.js frontend on port 3000
@@ -188,7 +196,7 @@ kg-mag/
 │   ├── tools/
 │   │   ├── embedding.py        # Sentence-transformers wrapper
 │   │   ├── vector_store.py     # FAISS persistent vector store
-│   │   ├── llm_client.py       # Anthropic Claude wrapper
+│   │   ├── llm_client.py       # Gemini API wrapper
 │   │   └── image_gen.py        # Nanobananpro image generation
 │   └── requirements.txt
 ├── frontend/
@@ -214,14 +222,14 @@ kg-mag/
 
 ### Technology Choices and Why
 
-| Component | Technology | Why |
-|-----------|-----------|-----|
-| LLM | Anthropic Claude | Best instruction-following, JSON reliability |
-| Embeddings | sentence-transformers | Free, runs locally, high quality |
-| Vector DB | FAISS | No external service needed, deterministic |
-| Backend | FastAPI | Async, auto-docs, typed, production-ready |
-| Frontend | Next.js 15 | App Router, Vercel-native, type-safe |
-| ML | scikit-learn GBM | Interpretable, fast, no GPU needed |
+| Component  | Technology            | Why                                          |
+| ---------- | --------------------- | -------------------------------------------- |
+| LLM        | Google Gemini         | Strong structured output and quality writing |
+| Embeddings | sentence-transformers | Free, runs locally, high quality             |
+| Vector DB  | FAISS                 | No external service needed, deterministic    |
+| Backend    | FastAPI               | Async, auto-docs, typed, production-ready    |
+| Frontend   | Next.js 15            | App Router, Vercel-native, type-safe         |
+| ML         | scikit-learn GBM      | Interpretable, fast, no GPU needed           |
 
 ---
 
@@ -272,6 +280,7 @@ Every text goes through normalization before chunking:
 ### Metadata Extraction
 
 Each chunk carries:
+
 - `source_id`: SHA-256 hash of filename+content (enables deduplication)
 - `filename`: original document name (for citations)
 - `heading`: section heading if detected
@@ -285,12 +294,14 @@ Each chunk carries:
 ### The Embedding Model
 
 We use `sentence-transformers/all-MiniLM-L6-v2`:
+
 - 384-dimensional dense vectors
 - 14,500 tokens/second on CPU
 - Trained specifically for semantic similarity
 - Downloads once, runs entirely offline
 
 **Why not OpenAI embeddings?**
+
 - Cost: $0.0001/1K tokens adds up for large corpora
 - Latency: network round-trip vs. in-process inference
 - Privacy: your documents never leave your server
@@ -336,18 +347,19 @@ Query string
 
 A single "write me an article" prompt produces mediocre output. Decomposing into specialized agents with distinct responsibilities yields measurably better results:
 
-| Agent | Single Responsibility | Input → Output |
-|-------|----------------------|----------------|
-| **Planner** | Strategic structure | Topic → Outline |
-| **Retriever** | Information gathering | Sections → Chunks |
-| **Writer** | Prose generation | Outline+Chunks → Sections |
-| **Critic** | Quality verification | Article → QA Report |
+| Agent         | Single Responsibility | Input → Output            |
+| ------------- | --------------------- | ------------------------- |
+| **Planner**   | Strategic structure   | Topic → Outline           |
+| **Retriever** | Information gathering | Sections → Chunks         |
+| **Writer**    | Prose generation      | Outline+Chunks → Sections |
+| **Critic**    | Quality verification  | Article → QA Report       |
 
 This mirrors how professional publications actually work: editor, researcher, writer, fact-checker.
 
 ### MCP-Style Orchestration
 
 Each agent:
+
 1. Receives a shared `PipelineContext` object
 2. Performs its single responsibility
 3. Mutates and returns the context
@@ -369,6 +381,7 @@ The Writer Agent's system prompt includes a critical constraint:
 > "ONLY write content that is directly supported by the provided source chunks. Insert citation markers [CITE:chunk_id] immediately after each factual claim."
 
 This produces output like:
+
 ```
 Transformer models use self-attention to weigh input tokens [abc123].
 This allows parallel processing unlike RNNs [def456].
@@ -388,26 +401,28 @@ Embedding similarity captures semantic relatedness, but it's a blunt instrument.
 - Chunk A (score: 0.72): "FAISS is 3x faster for datasets under 1M vectors"
 - Chunk B (score: 0.70): "Chroma provides native metadata filtering"
 
-Both are semantically similar. But Chunk A is more *relevant* because it directly compares the two systems. A reranker, with richer features, can identify this.
+Both are semantically similar. But Chunk A is more _relevant_ because it directly compares the two systems. A reranker, with richer features, can identify this.
 
 ### Features (6 total)
 
-| # | Feature | Description |
-|---|---------|-------------|
-| 0 | `cosine_sim` | FAISS inner-product score |
-| 1 | `keyword_overlap` | BM25-style term overlap: `|intersection| / sqrt(|q||c|)` |
-| 2 | `query_coverage` | Fraction of query terms found in chunk |
-| 3 | `heading_match` | Topic alignment with section heading |
-| 4 | `length_score` | Normalized chunk length |
-| 5 | `position_score` | Earlier in document = slight preference |
+| #   | Feature           | Description                             |
+| --- | ----------------- | --------------------------------------- | ------------ | ------- | --- | --- | --- | --- |
+| 0   | `cosine_sim`      | FAISS inner-product score               |
+| 1   | `keyword_overlap` | BM25-style term overlap: `              | intersection | / sqrt( | q   |     | c   | )`  |
+| 2   | `query_coverage`  | Fraction of query terms found in chunk  |
+| 3   | `heading_match`   | Topic alignment with section heading    |
+| 4   | `length_score`    | Normalized chunk length                 |
+| 5   | `position_score`  | Earlier in document = slight preference |
 
 ### Training
 
 For portfolio use, we simulate training data:
+
 - **Positive examples**: query derived from first 7 words of a chunk (the chunk is assumed relevant)
 - **Negative examples**: same query, random unrelated chunks
 
 In production, replace with:
+
 - User click data (implicit feedback)
 - Human relevance judgments (RLHF-style)
 - Distilled labels from a large cross-encoder (e.g., `ms-marco-MiniLM`)
@@ -421,6 +436,7 @@ The model is a `GradientBoostingClassifier` — interpretable, fast, no GPU need
 ### The Problem
 
 LLMs hallucinate. Even with RAG, a model can:
+
 - Extrapolate beyond what the source says
 - Confuse details between chunks
 - Generate plausible-sounding but unsourced claims
@@ -428,7 +444,7 @@ LLMs hallucinate. Even with RAG, a model can:
 ### KG-MAG's 4-Layer Defense
 
 **Layer 1: Grounding Verification**
-For each paragraph, we ask Claude to verify: "Is this claim supported by the provided source material?"
+For each paragraph, we ask the model to verify: "Is this claim supported by the provided source material?"
 We sample 2 paragraphs per section (not every sentence — too expensive) to check coverage.
 
 **Layer 2: Self-Consistency Check**
@@ -438,6 +454,7 @@ Regenerate the introduction with temperature=0.7, then compute semantic similari
 Measures reading ease (0–100). Academic/dense text scores low. We target ≥50 (standard reading level).
 
 Formula:
+
 ```
 206.835 - (1.015 × avg_words/sentence) - (84.6 × avg_syllables/word)
 ```
@@ -467,6 +484,7 @@ Low coverage = the writer may have drifted from the source material.
 The `ImageGenerationTool` calls Nanobananpro API with crafted prompts:
 
 **Header image prompt:**
+
 ```
 "A stunning, professional hero image for a Medium article about '{topic}'.
 Style: high-quality editorial photography or digital illustration.
@@ -474,6 +492,7 @@ Clean, modern, no text overlays. Wide aspect ratio (16:9)."
 ```
 
 **Section image prompt:**
+
 ```
 "An illustrative image for the section '{heading}' in an article about '{topic}'.
 Style: clean infographic or conceptual illustration. No text."
@@ -511,6 +530,7 @@ docker compose --profile production up --build
 ### Data Persistence
 
 All data is stored in the `kg_data` Docker volume:
+
 ```
 kg_data/
 ├── kb/               # FAISS index
@@ -520,6 +540,7 @@ kg_data/
 ```
 
 To backup:
+
 ```bash
 docker run --rm -v kg-mag_kg_data:/data -v $(pwd):/backup \
   alpine tar czf /backup/kg-mag-backup.tar.gz /data
@@ -533,6 +554,7 @@ docker run --rm -v kg-mag_kg_data:/data -v $(pwd):/backup \
 
 The FastAPI backend needs a server (Vercel doesn't support long-running Python processes well).
 Use one of:
+
 - **Railway**: `railway up` from the project root
 - **Render**: Connect GitHub repo, set `docker/Dockerfile.backend`
 - **AWS ECS**: Use the provided Dockerfile
@@ -575,12 +597,12 @@ CORS_ORIGINS=http://localhost:3000,https://kg-mag.vercel.app
 
 ### Environment Variables Reference
 
-| Variable | Where | Description |
-|----------|-------|-------------|
-| `NEXT_PUBLIC_API_URL` | Vercel | Backend base URL |
-| `NEXT_PUBLIC_BACKEND_API_KEY` | Vercel | Optional API auth |
-| `ANTHROPIC_API_KEY` | Backend | Claude API key |
-| `NANOBANANPRO_API_KEY` | Backend | Image generation key |
+| Variable                      | Where   | Description          |
+| ----------------------------- | ------- | -------------------- |
+| `NEXT_PUBLIC_API_URL`         | Vercel  | Backend base URL     |
+| `NEXT_PUBLIC_BACKEND_API_KEY` | Vercel  | Optional API auth    |
+| `GEMINI_API_KEY`              | Backend | Gemini API key       |
+| `NANOBANANPRO_API_KEY`        | Backend | Image generation key |
 
 ---
 
@@ -621,6 +643,7 @@ class SEOAgent:
 ```
 
 Register it in the orchestrator:
+
 ```python
 ctx = self._seo_agent.run(ctx)   # After WriterAgent
 ```
@@ -648,6 +671,7 @@ async def generate_stream(request: GenerateRequest):
 ### Add Multi-Language Support
 
 Add a `language` field to `GenerateRequest` and inject it into agent prompts:
+
 ```python
 system = f"You are a writer. Respond in {request.language}."
 ```
@@ -661,26 +685,31 @@ system = f"You are a writer. Respond in {request.language}."
 When building any RAG system, answer these questions in order:
 
 **1. What is the retrieval unit?**
+
 - Too small (sentence): fast but lacks context
 - Too large (full page): slow and noisy
 - Sweet spot: ~300–500 words with 10–15% overlap
 
 **2. What is the embedding strategy?**
+
 - Symmetric (same model for query and document): good for QA
 - Asymmetric: specialized query encoder (SPLADE, ColBERT) for complex retrieval
 - Start with `all-MiniLM-L6-v2`, upgrade to `bge-large-en` if recall is low
 
 **3. What is the retrieval strategy?**
+
 - Dense only (embeddings): good for semantic similarity
 - Sparse only (BM25): good for keyword matching
 - Hybrid (dense + sparse + reranker): best for production
 
 **4. What is the grounding strategy?**
+
 - Citation markers in generation (our approach)
 - Post-hoc attribution (match sentences to chunks after generation)
 - Constrained decoding (force model to only use source vocabulary)
 
 **5. How do you measure quality?**
+
 - MRR@10 for retrieval
 - Grounding score for faithfulness
 - ROUGE/BERTScore for text quality
@@ -800,11 +829,13 @@ python scripts/ingest_kb.py --query "your test query here" --top-k 5
 ### Debug Retrieval Quality
 
 If the article seems off-topic:
+
 ```bash
 python scripts/ingest_kb.py --validate
 ```
 
 Low MRR (< 0.4)?
+
 - Documents may not cover the topic well
 - Try adding more relevant source material
 - Adjust `CHUNK_SIZE` (smaller = more precise retrieval)
@@ -812,6 +843,7 @@ Low MRR (< 0.4)?
 ### Debug Hallucinations
 
 If the QA report shows low grounding score:
+
 1. Check if your documents actually contain information about the topic
 2. Lower `QA_GROUNDING_THRESHOLD` if the topic is inherently abstract
 3. Add more source material related to the topic
@@ -822,11 +854,13 @@ If the QA report shows low grounding score:
 ## 17. API Reference
 
 ### POST `/api/ingest`
+
 Upload documents to the knowledge base.
 
 **Form data:** `files` (multipart, supports `.pdf`, `.md`, `.txt`)
 
 **Response:**
+
 ```json
 {
   "job_id": "uuid",
@@ -838,9 +872,11 @@ Upload documents to the knowledge base.
 ```
 
 ### POST `/api/generate`
+
 Generate a grounded article.
 
 **Body:**
+
 ```json
 {
   "topic": "The impact of BERT on NLP benchmarks",
@@ -855,20 +891,75 @@ Generate a grounded article.
 **Response:** Full `GenerateResponse` with article and QA report.
 
 ### GET `/api/kb/status`
+
 Returns knowledge base statistics.
 
 ### GET `/health`
+
 Health check. Returns `200` when ready.
+
+---
+
+## 18. Future Direction: Cloud Deployment
+
+The current project already supports local Docker deployment and GHCR image publishing. The next production milestone is a cloud-native deployment path.
+
+### Target Cloud Architecture
+
+1. Deploy backend and frontend containers to a managed runtime (AWS ECS/Fargate, GCP Cloud Run, Azure Container Apps, or Railway/Render).
+2. Move local `/data` paths to managed persistent storage and backups.
+3. Put services behind managed HTTPS ingress with secrets in a secret manager.
+4. Centralize logs and add metrics/alerts for health and latency.
+
+### Recommended Implementation Phases
+
+1. **Phase 1: Lift-and-shift containers**
+   - Reuse current Docker images from GHCR with environment-specific configuration.
+2. **Phase 2: Managed persistence**
+   - Externalize document/artifact storage and define retention/backup policies.
+3. **Phase 3: Production hardening**
+   - Add autoscaling, rate limiting, and staged deployments (`staging` to `prod`).
+4. **Phase 4: Platform reliability**
+   - Add tracing, SLO dashboards, and incident runbooks.
+
+### Why This Matters
+
+- Lowers onboarding friction for contributors and demo users.
+- Makes runtime behavior reproducible beyond local environments.
+- Prepares the codebase for multi-user, production-grade workloads.
 
 ---
 
 ## Contributing
 
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feature/better-chunking`
-3. Add tests for your changes
-4. Run `pytest tests/` to ensure nothing is broken
-5. Submit a PR with a clear description
+1. Fork the repository and clone your fork.
+2. Create a focused branch from `main`:
+
+- `git checkout -b feature/your-change`
+
+3. Make your changes and add tests where behavior changes.
+4. Run checks before pushing:
+
+- Backend: `pytest tests/ -v`
+- Frontend: `cd frontend && npm ci && npm run lint && npm run build`
+
+5. Push branch and open a pull request with a clear summary and test evidence.
+6. Follow the full guide in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Run Using Published GHCR Images
+
+Use this to validate the exact published containers (no local build required):
+
+```bash
+docker login ghcr.io
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d --no-build
+```
+
+Verify services:
+
+- Frontend: http://localhost:3000
+- Backend health: http://localhost:8080/health
 
 ## License
 
@@ -876,4 +967,4 @@ MIT License — see [LICENSE](LICENSE)
 
 ---
 
-*Built as a portfolio-quality demonstration of production RAG engineering. Every design decision is documented above. Feel free to use this as a reference or starting point.*
+_Built as a portfolio-quality demonstration of production RAG engineering. Every design decision is documented above. Feel free to use this as a reference or starting point._

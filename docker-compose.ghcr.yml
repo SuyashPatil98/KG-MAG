@@ -1,0 +1,46 @@
+services:
+  backend:
+    image: ghcr.io/suyashpatil98/kg-mag-backend:latest
+    container_name: kg-mag-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      KNOWLEDGE_BASE_PATH: /data/kb
+      UPLOADS_PATH: /data/uploads
+      ARTIFACTS_PATH: /data/artifacts
+      FAISS_INDEX_PATH: /data/kb/faiss_index
+      ENVIRONMENT: production
+    volumes:
+      - kg_data:/data
+    ports:
+      - "8080:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks:
+      - kg-mag-net
+
+  frontend:
+    image: ghcr.io/suyashpatil98/kg-mag-frontend:latest
+    container_name: kg-mag-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - kg-mag-net
+
+volumes:
+  kg_data:
+
+networks:
+  kg-mag-net:
+    driver: bridge
