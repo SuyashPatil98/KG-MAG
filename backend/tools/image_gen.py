@@ -173,9 +173,7 @@ class ImageGenerationTool:
         async with httpx.AsyncClient(timeout=60.0) as client:
             for delay in _RETRY_DELAYS:
                 try:
-                    resp = await client.post(
-                        url, json=payload, headers=headers
-                    )
+                    resp = await client.post(url, json=payload, headers=headers)
                     resp.raise_for_status()
                     data = resp.json()
                     return await self._handle_response(data, prompt)
@@ -203,7 +201,10 @@ class ImageGenerationTool:
                             "no address associated with hostname",
                         ]
                     ):
-                        logger.error("Image API DNS resolution failed — skipping retries", error=str(e))
+                        logger.error(
+                            "Image API DNS resolution failed — skipping retries",
+                            error=str(e),
+                        )
                         return None
 
                     logger.error("Image API request error", error=str(e))

@@ -57,8 +57,8 @@ class FAISSVectorStore:
         self._dim = self._engine.dimension
 
         self._lock = threading.RLock()
-        self._chunks: dict[int, DocumentChunk] = {}   # int_id → chunk
-        self._str_to_int: dict[str, int] = {}         # chunk_id → int_id
+        self._chunks: dict[int, DocumentChunk] = {}  # int_id → chunk
+        self._str_to_int: dict[str, int] = {}  # chunk_id → int_id
         self._next_id: int = 0
         self._index: "faiss.IndexIDMap2" = self._empty_index()
 
@@ -102,7 +102,9 @@ class FAISSVectorStore:
             return 0
 
         texts = [c.text for c in new_chunks]
-        vectors = self._engine.encode(texts, normalize=True, show_progress=len(texts) > 100)
+        vectors = self._engine.encode(
+            texts, normalize=True, show_progress=len(texts) > 100
+        )
 
         with self._lock:
             int_ids = np.arange(
@@ -143,14 +145,16 @@ class FAISSVectorStore:
 
         results: list[RetrievedChunk] = []
         for rank, (score, iid) in enumerate(zip(scores[0], ids[0]), start=1):
-            if iid == -1:    # FAISS padding
+            if iid == -1:  # FAISS padding
                 continue
             chunk = self._chunks.get(int(iid))
             if chunk is None:
                 continue
             # Clip to [0, 1] — inner product on normalized vectors can slightly exceed 1
             results.append(
-                RetrievedChunk(chunk=chunk, score=float(np.clip(score, 0.0, 1.0)), rank=rank)
+                RetrievedChunk(
+                    chunk=chunk, score=float(np.clip(score, 0.0, 1.0)), rank=rank
+                )
             )
 
         return results
@@ -163,7 +167,11 @@ class FAISSVectorStore:
             self._faiss.write_index(self._index, str(self._vectors_file))
             with open(self._chunks_file, "wb") as f:
                 pickle.dump(
-                    {"chunks": self._chunks, "str_to_int": self._str_to_int, "next_id": self._next_id},
+                    {
+                        "chunks": self._chunks,
+                        "str_to_int": self._str_to_int,
+                        "next_id": self._next_id,
+                    },
                     f,
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )

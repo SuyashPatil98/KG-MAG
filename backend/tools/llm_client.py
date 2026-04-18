@@ -36,7 +36,9 @@ class LLMClient:
 
     def __init__(self, use_mock: bool = False) -> None:
         cfg = get_settings()
-        self._use_mock = use_mock or not cfg.openai_api_key or cfg.openai_api_key.strip() == ""
+        self._use_mock = (
+            use_mock or not cfg.openai_api_key or cfg.openai_api_key.strip() == ""
+        )
         self._model = cfg.llm_model
         self._max_tokens = cfg.max_article_tokens
         self._token_log: list[dict] = []
@@ -49,7 +51,9 @@ class LLMClient:
                 self._client = OpenAI(api_key=cfg.openai_api_key)
                 logger.info("LLMClient initialized with OpenAI API", model=self._model)
             except Exception as e:
-                logger.warning("Failed to initialize OpenAI client, using mock mode", error=str(e))
+                logger.warning(
+                    "Failed to initialize OpenAI client, using mock mode", error=str(e)
+                )
                 self._client = None
                 self._use_mock = True
 
@@ -71,7 +75,9 @@ class LLMClient:
             )
 
         if tag == "critic_ground":
-            return '{"is_grounded": true, "supporting_chunk_ids": [], "confidence": 0.6}'
+            return (
+                '{"is_grounded": true, "supporting_chunk_ids": [], "confidence": 0.6}'
+            )
 
         if tag == "writer_conclusion":
             return (
@@ -123,12 +129,14 @@ class LLMClient:
                 input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
                 output_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
 
-                self._token_log.append({
-                    "tag": tag,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "elapsed_s": round(elapsed, 2),
-                })
+                self._token_log.append(
+                    {
+                        "tag": tag,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "elapsed_s": round(elapsed, 2),
+                    }
+                )
                 logger.debug(
                     "LLM call",
                     tag=tag,
@@ -146,7 +154,12 @@ class LLMClient:
 
             except Exception as e:
                 wait = _BASE_DELAY * (2 ** (attempt - 1))
-                logger.warning("OpenAI call failed, retrying", attempt=attempt, wait_s=wait, error=str(e))
+                logger.warning(
+                    "OpenAI call failed, retrying",
+                    attempt=attempt,
+                    wait_s=wait,
+                    error=str(e),
+                )
                 if attempt == _MAX_RETRIES:
                     raise
                 time.sleep(wait)
@@ -174,7 +187,9 @@ class LLMClient:
             system.rstrip()
             + "\n\nRespond ONLY with valid JSON. No explanation, no markdown code fences."
         )
-        raw = self.complete(json_system, user, max_tokens=max_tokens, temperature=0.2, tag=tag)
+        raw = self.complete(
+            json_system, user, max_tokens=max_tokens, temperature=0.2, tag=tag
+        )
 
         # Strip ```json ... ``` if model ignores instructions
         raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())

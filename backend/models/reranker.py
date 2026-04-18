@@ -59,6 +59,7 @@ SCALER_PATH = Path("./data/models/reranker_scaler.pkl")
 
 # ── Feature Engineering ───────────────────────────────────────────────────────
 
+
 def _tokenize(text: str) -> set[str]:
     return set(re.findall(r"\b[a-zA-Z]{2,}\b", text.lower()))
 
@@ -111,18 +112,21 @@ def extract_features(
     rows = []
     for chunk, score, pos, ln in zip(chunks, scores, positions, chunk_lengths):
         chunk_tokens = _tokenize(chunk.text)
-        rows.append([
-            float(score),
-            _keyword_overlap(query_tokens, chunk_tokens),
-            _query_coverage(query_tokens, chunk_tokens),
-            _heading_match(query_tokens, chunk.heading),
-            ln / max_len,
-            1.0 - (pos / (max_pos + 1)),
-        ])
+        rows.append(
+            [
+                float(score),
+                _keyword_overlap(query_tokens, chunk_tokens),
+                _query_coverage(query_tokens, chunk_tokens),
+                _heading_match(query_tokens, chunk.heading),
+                ln / max_len,
+                1.0 - (pos / (max_pos + 1)),
+            ]
+        )
     return np.array(rows, dtype=np.float32)
 
 
 # ── Model Training ────────────────────────────────────────────────────────────
+
 
 def simulate_training_data(
     chunks: list[DocumentChunk],
@@ -141,6 +145,7 @@ def simulate_training_data(
       - Distilled labels from a large cross-encoder (e.g. ms-marco)
     """
     from random import sample, seed as rseed
+
     rseed(42)
 
     if len(chunks) < 10:
@@ -151,7 +156,7 @@ def simulate_training_data(
 
     for pos_chunk in chosen:
         words = pos_chunk.text.split()
-        query = " ".join(words[:min(7, len(words))])
+        query = " ".join(words[: min(7, len(words))])
         q_tokens = _tokenize(query)
 
         # Positive sample
@@ -229,6 +234,7 @@ def _load_model():
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 def rerank(
     query: str,
     candidates: list[RetrievedChunk],
@@ -257,7 +263,7 @@ def rerank(
 
     X = extract_features(query, chunks, scores, positions, lengths)
     X_scaled = scaler.transform(X)
-    proba = model.predict_proba(X_scaled)[:, 1]   # P(relevant)
+    proba = model.predict_proba(X_scaled)[:, 1]  # P(relevant)
 
     ranked = sorted(
         zip(candidates, proba),
@@ -270,7 +276,7 @@ def rerank(
         results.append(
             RetrievedChunk(
                 chunk=cand.chunk,
-                score=float(prob),    # reranker score replaces FAISS score
+                score=float(prob),  # reranker score replaces FAISS score
                 rank=new_rank,
             )
         )

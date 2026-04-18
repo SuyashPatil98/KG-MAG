@@ -163,7 +163,7 @@ def cmd_validate_retrieval() -> None:
     for i, target_chunk in enumerate(chunks):
         # Use first 8 words as query
         words = target_chunk.text.split()
-        query = " ".join(words[:min(8, len(words))])
+        query = " ".join(words[: min(8, len(words))])
 
         results = store.search(query, top_k=10)
         retrieved_ids = [r.chunk.chunk_id for r in results]
@@ -191,12 +191,18 @@ def cmd_validate_retrieval() -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="KG-MAG CLI Utilities")
     parser.add_argument("--dir", help="Ingest documents from directory")
-    parser.add_argument("--rebuild", action="store_true", help="Clear existing index before ingesting")
+    parser.add_argument(
+        "--rebuild", action="store_true", help="Clear existing index before ingesting"
+    )
     parser.add_argument("--query", help="Test retrieval with a query")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--stats", action="store_true", help="Print KB statistics")
-    parser.add_argument("--train-reranker", action="store_true", help="Train reranker model")
-    parser.add_argument("--validate", action="store_true", help="Validate retrieval quality")
+    parser.add_argument(
+        "--train-reranker", action="store_true", help="Train reranker model"
+    )
+    parser.add_argument(
+        "--validate", action="store_true", help="Validate retrieval quality"
+    )
 
     args = parser.parse_args()
 

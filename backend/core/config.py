@@ -52,9 +52,7 @@ class Settings(BaseSettings):
     chroma_port: int = Field(default=8001)
 
     # ── Embeddings ───────────────────────────────────────────────────────────
-    embedding_model: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
     embedding_device: Literal["cpu", "cuda", "mps"] = Field(default="cpu")
     embedding_batch_size: int = Field(default=64, ge=1)
 
@@ -81,8 +79,12 @@ class Settings(BaseSettings):
     # ── API server ───────────────────────────────────────────────────────────
     backend_host: str = Field(default="0.0.0.0")
     backend_port: int = Field(default=8000)
-    cors_origins: list[str] = Field(default=["http://localhost:3000", "http://127.0.0.1:3000"])
-    backend_api_key: str = Field(default="", description="Bearer auth key for API (required in production)")
+    cors_origins: list[str] = Field(
+        default=["http://localhost:3000", "http://127.0.0.1:3000"]
+    )
+    backend_api_key: str = Field(
+        default="", description="Bearer auth key for API (required in production)"
+    )
 
     # ── Security controls ────────────────────────────────────────────────────
     max_upload_files_per_request: int = Field(default=10, ge=1, le=100)

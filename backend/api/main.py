@@ -84,11 +84,15 @@ def _display_name_from_stored(stored_name: str) -> str:
 def _list_upload_files(cfg, vector_store: FAISSVectorStore) -> list[UploadedFileInfo]:
     chunk_count_by_file: dict[str, int] = {}
     for chunk in vector_store.all_chunks():
-        chunk_count_by_file[chunk.filename] = chunk_count_by_file.get(chunk.filename, 0) + 1
+        chunk_count_by_file[chunk.filename] = (
+            chunk_count_by_file.get(chunk.filename, 0) + 1
+        )
 
     files: list[UploadedFileInfo] = []
     cfg.uploads_path.mkdir(parents=True, exist_ok=True)
-    for fp in sorted(cfg.uploads_path.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+    for fp in sorted(
+        cfg.uploads_path.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True
+    ):
         if not fp.is_file() or fp.suffix.lower() not in SUPPORTED_UPLOAD_EXTS:
             continue
         stat = fp.stat()
@@ -133,7 +137,9 @@ def _rebuild_index_from_uploads(cfg, vector_store: FAISSVectorStore) -> tuple[in
     return total_docs, total_chunks
 
 
-def _rebuild_if_uploads_exist(cfg, vector_store: FAISSVectorStore) -> tuple[bool, int, int]:
+def _rebuild_if_uploads_exist(
+    cfg, vector_store: FAISSVectorStore
+) -> tuple[bool, int, int]:
     """
     Rebuild the FAISS index from uploaded files only when the index is empty.
     Returns: (rebuilt, documents_processed, chunks_indexed)
@@ -153,7 +159,9 @@ def _rebuild_if_uploads_exist(cfg, vector_store: FAISSVectorStore) -> tuple[bool
     return chunks > 0, docs, chunks
 
 
-def _append_generation_log(logs: list[GenerationRunLog], entry: GenerationRunLog) -> None:
+def _append_generation_log(
+    logs: list[GenerationRunLog], entry: GenerationRunLog
+) -> None:
     logs.insert(0, entry)
     if len(logs) > MAX_GENERATION_LOGS:
         del logs[MAX_GENERATION_LOGS:]
@@ -191,7 +199,9 @@ def _client_ip(request: Request) -> str:
 
     return "unknown"
 
+
 # ── Application Factory ───────────────────────────────────────────────────────
+
 
 def create_app() -> FastAPI:
     cfg = get_settings()
@@ -393,7 +403,9 @@ def create_app() -> FastAPI:
             limit=cfg.rate_limit_management_requests,
         )
 
-        docs, chunks = await run_in_threadpool(_rebuild_index_from_uploads, cfg, _vector_store)
+        docs, chunks = await run_in_threadpool(
+            _rebuild_index_from_uploads, cfg, _vector_store
+        )
         return RebuildCorpusResponse(
             status="rebuilt" if chunks > 0 else "empty",
             documents_processed=docs,
@@ -496,10 +508,7 @@ def create_app() -> FastAPI:
                 error=str(e),
                 error_type=type(e).__name__,
             )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Ingestion failed: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
     @app.post("/api/generate", response_model=GenerateResponse)
     async def generate_article(
@@ -546,7 +555,7 @@ def create_app() -> FastAPI:
                         run_qa=request.run_qa,
                         max_sections=request.max_sections,
                     ),
-                    timeout=300.0  # 5 minute timeout
+                    timeout=300.0,  # 5 minute timeout
                 )
             except asyncio.TimeoutError:
                 logger.error(
@@ -569,7 +578,7 @@ def create_app() -> FastAPI:
                 )
                 raise HTTPException(
                     status_code=504,
-                    detail="Generation request timed out after 5 minutes"
+                    detail="Generation request timed out after 5 minutes",
                 )
         except HTTPException:
             raise
@@ -617,9 +626,15 @@ def create_app() -> FastAPI:
                 image_generated=image_generated,
                 image_failed=image_failed,
                 qa_passed=ctx.qa_report.passed if ctx.qa_report else None,
-                qa_overall_confidence=ctx.qa_report.overall_confidence if ctx.qa_report else None,
-                qa_grounding_score=ctx.qa_report.grounding_score if ctx.qa_report else None,
-                qa_readability_score=ctx.qa_report.readability_score if ctx.qa_report else None,
+                qa_overall_confidence=(
+                    ctx.qa_report.overall_confidence if ctx.qa_report else None
+                ),
+                qa_grounding_score=(
+                    ctx.qa_report.grounding_score if ctx.qa_report else None
+                ),
+                qa_readability_score=(
+                    ctx.qa_report.readability_score if ctx.qa_report else None
+                ),
                 qa_warning_count=len(ctx.qa_report.warnings) if ctx.qa_report else 0,
                 error=None if ctx.article else "Pipeline returned no article",
             ),
@@ -657,17 +672,25 @@ def create_app() -> FastAPI:
         successful_runs = sum(1 for r in _generation_logs if r.status == "completed")
         failed_runs = total_runs - successful_runs
         qa_enabled_runs = sum(1 for r in _generation_logs if r.run_qa)
-        qa_passed_runs = sum(1 for r in _generation_logs if r.run_qa and r.qa_passed is True)
-        qa_failed_runs = sum(1 for r in _generation_logs if r.run_qa and r.qa_passed is False)
+        qa_passed_runs = sum(
+            1 for r in _generation_logs if r.run_qa and r.qa_passed is True
+        )
+        qa_failed_runs = sum(
+            1 for r in _generation_logs if r.run_qa and r.qa_passed is False
+        )
         avg_duration = (
-            sum(r.duration_seconds for r in _generation_logs) / total_runs if total_runs else 0.0
+            sum(r.duration_seconds for r in _generation_logs) / total_runs
+            if total_runs
+            else 0.0
         )
 
         total_input_tokens = sum(
-            int(r.token_usage.get("total_input_tokens", 0) or 0) for r in _generation_logs
+            int(r.token_usage.get("total_input_tokens", 0) or 0)
+            for r in _generation_logs
         )
         total_output_tokens = sum(
-            int(r.token_usage.get("total_output_tokens", 0) or 0) for r in _generation_logs
+            int(r.token_usage.get("total_output_tokens", 0) or 0)
+            for r in _generation_logs
         )
 
         return DashboardMetrics(
@@ -715,6 +738,7 @@ def _retrain_reranker(vector_store: FAISSVectorStore) -> None:
         return
     try:
         from backend.models.reranker import train_reranker
+
         train_reranker(chunks)
     except Exception as e:
         logger.error("Reranker training failed", error=str(e))

@@ -38,6 +38,7 @@ logger = structlog.get_logger(__name__)
 
 # ── Text Cleaning ─────────────────────────────────────────────────────────────
 
+
 def clean_text(raw: str) -> str:
     """
     Normalize and clean raw text extracted from any source.
@@ -65,6 +66,7 @@ def clean_text(raw: str) -> str:
 
 
 # ── PDF Extraction ────────────────────────────────────────────────────────────
+
 
 def extract_pdf(file_path: Path) -> tuple[str, DocumentMetadata]:
     """
@@ -102,7 +104,10 @@ def extract_pdf(file_path: Path) -> tuple[str, DocumentMetadata]:
 
         if not full_text.strip():
             # Fallback: pdfplumber extracted nothing → try pymupdf
-            logger.info("Pdfplumber extracted no text, trying pymupdf fallback", path=str(file_path))
+            logger.info(
+                "Pdfplumber extracted no text, trying pymupdf fallback",
+                path=str(file_path),
+            )
             full_text = _extract_pdf_pymupdf(file_path)
 
     except ImportError:
@@ -116,7 +121,7 @@ def extract_pdf(file_path: Path) -> tuple[str, DocumentMetadata]:
             "PDF extraction failed",
             file=str(file_path),
             error=str(e),
-            error_type=type(e).__name__
+            error_type=type(e).__name__,
         )
         raise
 
@@ -148,12 +153,13 @@ def _extract_pdf_pymupdf(file_path: Path) -> str:
             "PyMuPDF extraction failed",
             file=str(file_path),
             error=str(e),
-            error_type=type(e).__name__
+            error_type=type(e).__name__,
         )
         raise RuntimeError(f"Failed to extract PDF with pymupdf: {str(e)}") from e
 
 
 # ── Markdown Extraction ───────────────────────────────────────────────────────
+
 
 def extract_markdown(file_path: Path) -> tuple[str, DocumentMetadata]:
     """
@@ -172,7 +178,7 @@ def extract_markdown(file_path: Path) -> tuple[str, DocumentMetadata]:
             title = m.group(1).strip().strip('"').strip("'")
         if m := re.search(r"^author:\s*(.+)$", fm_block, re.MULTILINE):
             author = m.group(1).strip()
-        raw = raw[fm_match.end():]
+        raw = raw[fm_match.end() :]
 
     cleaned = clean_text(raw)
     meta = DocumentMetadata(
@@ -186,6 +192,7 @@ def extract_markdown(file_path: Path) -> tuple[str, DocumentMetadata]:
 
 
 # ── Plain Text Extraction ─────────────────────────────────────────────────────
+
 
 def extract_text(file_path: Path) -> tuple[str, DocumentMetadata]:
     raw = file_path.read_text(encoding="utf-8", errors="replace")
@@ -297,7 +304,9 @@ def _semantic_units(text: str, chunk_size: int) -> list[tuple[str | None, str]]:
             trailing = "\n".join(lines[1:]).strip()
             if trailing:
                 units.extend(
-                    _paragraph_to_semantic_units(trailing, current_heading, max_unit_words)
+                    _paragraph_to_semantic_units(
+                        trailing, current_heading, max_unit_words
+                    )
                 )
             continue
 
@@ -363,7 +372,7 @@ def _semantic_contextual_chunks(
                 words_since_emit = 0
                 remaining = chunk_size - len(buffer_words)
 
-            take = words[cursor:cursor + remaining]
+            take = words[cursor : cursor + remaining]
             if not take:
                 break
             buffer_words.extend(take)
@@ -518,9 +527,7 @@ def ingest_file(file_path: Path) -> list[DocumentChunk]:
 
     if extractor is None:
         supported = ", ".join(EXTRACTORS.keys())
-        raise ValueError(
-            f"Unsupported file type '{suffix}'. Supported: {supported}"
-        )
+        raise ValueError(f"Unsupported file type '{suffix}'. Supported: {supported}")
 
     logger.info("Ingesting file", path=str(file_path), type=suffix)
     text, meta = extractor(file_path)
@@ -539,7 +546,8 @@ def ingest_directory(directory: Path) -> Iterator[list[DocumentChunk]]:
     """
     supported_exts = set(EXTRACTORS.keys())
     files = [
-        f for f in directory.rglob("*")
+        f
+        for f in directory.rglob("*")
         if f.is_file() and f.suffix.lower() in supported_exts
     ]
 

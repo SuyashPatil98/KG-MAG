@@ -62,9 +62,11 @@ logger = structlog.get_logger(__name__)
 
 # ── Shared Pipeline Context ───────────────────────────────────────────────────
 
+
 @dataclass
 class PipelineContext:
     """Shared state flowing through all agents."""
+
     topic: str
     target_audience: str = "general tech readers"
     tone: str = "informative and engaging"
@@ -82,6 +84,7 @@ class PipelineContext:
 
 
 # ── Planner Agent ─────────────────────────────────────────────────────────────
+
 
 class PlannerAgent:
     """
@@ -167,6 +170,7 @@ Include 4-{ctx.max_sections} sections.
 
 # ── Retriever Agent ───────────────────────────────────────────────────────────
 
+
 class RetrieverAgent:
     """
     For each section in the outline, retrieves relevant chunks from the knowledge base.
@@ -199,7 +203,7 @@ class RetrieverAgent:
             # Deduplicate: prefer unseen chunks but don't leave sections empty
             unique = [r for r in reranked if r.chunk.chunk_id not in seen_chunks]
             if not unique:
-                unique = reranked[:2]   # allow repeats if no alternatives
+                unique = reranked[:2]  # allow repeats if no alternatives
 
             for r in unique:
                 seen_chunks.add(r.chunk.chunk_id)
@@ -216,6 +220,7 @@ class RetrieverAgent:
 
 
 # ── Writer Agent ──────────────────────────────────────────────────────────────
+
 
 class WriterAgent:
     """
@@ -284,8 +289,12 @@ CRITICAL RULES:
         tone: str,
         has_section_image: bool,
     ) -> ArticleSection:
-        context_text = self._format_chunks(chunks) if chunks else "No source material available."
-        prev_context = "\n".join(f"- {h}" for h in prev_sections) if prev_sections else "None yet."
+        context_text = (
+            self._format_chunks(chunks) if chunks else "No source material available."
+        )
+        prev_context = (
+            "\n".join(f"- {h}" for h in prev_sections) if prev_sections else "None yet."
+        )
 
         user_prompt = f"""
 Article topic: {topic}
@@ -323,6 +332,7 @@ Section image available for this section: {"yes" if has_section_image else "no"}
 
         # Extract citation markers
         import re
+
         cited_ids = re.findall(r"\[CITE:([a-zA-Z0-9_-]+)\]", raw)
 
         # Clean citation markers for display (keep them as footnote refs)
@@ -356,7 +366,9 @@ Section image available for this section: {"yes" if has_section_image else "no"}
         if not has_any_image:
             return
 
-        if any(self._contains_visual_reference(section.content) for section in sections):
+        if any(
+            self._contains_visual_reference(section.content) for section in sections
+        ):
             return
 
         section_with_image = next((s for s in sections if s.image_url), None)
@@ -375,9 +387,15 @@ Section image available for this section: {"yes" if has_section_image else "no"}
         )
 
     def _write_conclusion(
-        self, topic: str, outline: ArticleOutline, sections: list[ArticleSection], tone: str
+        self,
+        topic: str,
+        outline: ArticleOutline,
+        sections: list[ArticleSection],
+        tone: str,
     ) -> str:
-        section_summaries = "\n".join(f"- {s.heading}: {s.content[:100]}..." for s in sections)
+        section_summaries = "\n".join(
+            f"- {s.heading}: {s.content[:100]}..." for s in sections
+        )
         user_prompt = f"""
 Write a compelling conclusion (150–200 words) for an article titled "{outline.title}" about {topic}.
 The article covered:
@@ -408,8 +426,13 @@ No new facts — summarize and inspire.
             chunks = ctx.retrieved.get(heading, [])
             section_image_url = ctx.image_urls.get(heading)
             section = self._write_section(
-                ctx.topic, ctx.outline, heading, chunks,
-                written_headings, ctx.tone, bool(section_image_url)
+                ctx.topic,
+                ctx.outline,
+                heading,
+                chunks,
+                written_headings,
+                ctx.tone,
+                bool(section_image_url),
             )
 
             # Attach image URL if generated
@@ -421,7 +444,9 @@ No new facts — summarize and inspire.
 
             sections.append(section)
             written_headings.append(heading)
-            logger.debug("Section written", heading=heading, words=len(section.content.split()))
+            logger.debug(
+                "Section written", heading=heading, words=len(section.content.split())
+            )
 
         conclusion = self._write_conclusion(ctx.topic, ctx.outline, sections, ctx.tone)
 
@@ -444,7 +469,9 @@ No new facts — summarize and inspire.
             seo_keywords=ctx.outline.seo_keywords,
             tags=ctx.outline.seo_keywords[:5],
             model_used=get_settings().llm_model,
-            token_usage=self._llm.token_summary(include_tag_prefixes=("planner", "writer")),
+            token_usage=self._llm.token_summary(
+                include_tag_prefixes=("planner", "writer")
+            ),
         )
 
         logger.info(
@@ -457,6 +484,7 @@ No new facts — summarize and inspire.
 
 
 # ── Critic Agent (QA) ─────────────────────────────────────────────────────────
+
 
 class CriticAgent:
     """
@@ -485,6 +513,7 @@ Be strict: if a claim is not directly supported, mark it as ungrounded."""
         90-100: Very Easy, 60-70: Standard, 0-30: Very Difficult.
         """
         import re
+
         sentences = re.split(r"[.!?]+", text)
         sentences = [s.strip() for s in sentences if s.strip()]
         words = text.split()
@@ -502,7 +531,9 @@ Be strict: if a claim is not directly supported, mark it as ungrounded."""
         total_syllables = sum(syllables(w) for w in words)
         avg_syllables_per_word = total_syllables / len(words)
 
-        score = 206.835 - (1.015 * avg_words_per_sentence) - (84.6 * avg_syllables_per_word)
+        score = (
+            206.835 - (1.015 * avg_words_per_sentence) - (84.6 * avg_syllables_per_word)
+        )
         return max(0.0, min(100.0, score))
 
     @staticmethod
@@ -528,7 +559,9 @@ Be strict: if a claim is not directly supported, mark it as ungrounded."""
             paras = [p.strip() for p in section.content.split("\n\n") if p.strip()]
             for para in paras[:max_paragraphs_per_section]:
                 cited_ids = [
-                    cid for cid in self._extract_inline_citations(para) if cid in valid_source_ids
+                    cid
+                    for cid in self._extract_inline_citations(para)
+                    if cid in valid_source_ids
                 ]
                 is_grounded = len(cited_ids) > 0
                 results.append(
@@ -575,7 +608,9 @@ Respond with JSON: {{"is_grounded": true/false, "supporting_chunk_ids": ["id1", 
                         {
                             "sentence": para[:200],
                             "is_grounded": data.get("is_grounded", False),
-                            "supporting_chunk_ids": data.get("supporting_chunk_ids", []),
+                            "supporting_chunk_ids": data.get(
+                                "supporting_chunk_ids", []
+                            ),
                             "confidence": float(data.get("confidence", 0.5)),
                         }
                     )
@@ -614,7 +649,9 @@ Respond with JSON: {{"is_grounded": true/false, "supporting_chunk_ids": ["id1", 
             return 1.0
         return len(cited_ids & all_retrieved_ids) / len(all_retrieved_ids)
 
-    def _self_consistency_score(self, article: GeneratedArticle, ctx: PipelineContext) -> float:
+    def _self_consistency_score(
+        self, article: GeneratedArticle, ctx: PipelineContext
+    ) -> float:
         """
         Token-free consistency approximation using local embeddings.
         Measures semantic continuity between adjacent sections and blends
@@ -639,7 +676,9 @@ Respond with JSON: {{"is_grounded": true/false, "supporting_chunk_ids": ["id1", 
             sim = float(engine.cosine_similarity(vecs[i], vecs[i + 1]))
             adjacent_sims.append(max(0.0, min(1.0, sim)))
 
-        topical_cohesion = sum(adjacent_sims) / len(adjacent_sims) if adjacent_sims else 0.7
+        topical_cohesion = (
+            sum(adjacent_sims) / len(adjacent_sims) if adjacent_sims else 0.7
+        )
 
         total_words = sum(len(section.content.split()) for section in article.sections)
         total_citations = sum(len(section.citations) for section in article.sections)
@@ -655,7 +694,9 @@ Respond with JSON: {{"is_grounded": true/false, "supporting_chunk_ids": ["id1", 
         article = ctx.article
         logger.info("CriticAgent: running QA checks")
 
-        full_text = " ".join(s.content for s in article.sections) + " " + article.conclusion
+        full_text = (
+            " ".join(s.content for s in article.sections) + " " + article.conclusion
+        )
 
         # 1. Grounding verification
         grounding_results = self._verify_grounding(article)
@@ -728,6 +769,7 @@ Respond with JSON: {{"is_grounded": true/false, "supporting_chunk_ids": ["id1", 
 
 
 # ── Orchestrator ──────────────────────────────────────────────────────────────
+
 
 class ArticleOrchestrator:
     """
@@ -820,6 +862,7 @@ class ArticleOrchestrator:
         if generate_images and ctx.outline:
             t_stage = time.perf_counter()
             from backend.tools.image_gen import ImageGenerationTool
+
             img_tool = ImageGenerationTool()
             content_brief = self._build_image_content_brief(ctx.retrieved)
             ctx.image_urls = await img_tool.generate_article_images(
@@ -838,7 +881,9 @@ class ArticleOrchestrator:
                     ctx.image_urls[first_section] = header_image_url
                 ctx.image_urls["header"] = None
 
-            ctx.stage_timings["image_generation_s"] = round(time.perf_counter() - t_stage, 3)
+            ctx.stage_timings["image_generation_s"] = round(
+                time.perf_counter() - t_stage, 3
+            )
 
         t_stage = time.perf_counter()
         ctx = self._writer.run(ctx)

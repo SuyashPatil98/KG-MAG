@@ -12,8 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ── Document / Chunk Models ───────────────────────────────────────────────────
+
 
 class SourceType(str, Enum):
     PDF = "pdf"
@@ -39,15 +39,16 @@ class DocumentChunk(BaseModel):
     filename: str
     text: str
     chunk_index: int
-    heading: str | None = None          # Section heading if detected
+    heading: str | None = None  # Section heading if detected
     page_number: int | None = None
     token_count: int | None = None
-    embedding: list[float] | None = None   # Populated during indexing
+    embedding: list[float] | None = None  # Populated during indexing
     ingested_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class RetrievedChunk(BaseModel):
     """A chunk returned from the vector store with its relevance score."""
+
     chunk: DocumentChunk
     score: float = Field(ge=0.0, le=1.0, description="Cosine similarity score")
     rank: int = Field(ge=1)
@@ -55,10 +56,11 @@ class RetrievedChunk(BaseModel):
 
 # ── Article Models ────────────────────────────────────────────────────────────
 
+
 class ArticleSection(BaseModel):
     heading: str
     content: str
-    citations: list[str] = Field(default_factory=list)   # chunk_ids cited
+    citations: list[str] = Field(default_factory=list)  # chunk_ids cited
     image_url: str | None = None
     image_prompt: str | None = None
 
@@ -67,8 +69,8 @@ class ArticleOutline(BaseModel):
     title: str
     subtitle: str
     target_audience: str
-    estimated_reading_time: int          # minutes
-    sections: list[str]                  # section headings
+    estimated_reading_time: int  # minutes
+    sections: list[str]  # section headings
     seo_keywords: list[str] = Field(default_factory=list)
 
 
@@ -90,6 +92,7 @@ class GeneratedArticle(BaseModel):
 
 # ── QA Models ────────────────────────────────────────────────────────────────
 
+
 class GroundingResult(BaseModel):
     sentence: str
     is_grounded: bool
@@ -99,17 +102,18 @@ class GroundingResult(BaseModel):
 
 class QAReport(BaseModel):
     article_id: str
-    grounding_score: float          # 0–1 fraction of grounded sentences
-    readability_score: float        # Flesch Reading Ease 0–100
-    coverage_score: float           # % retrieved chunks actually cited
-    consistency_score: float        # Self-consistency (0–1)
-    overall_confidence: float       # Weighted composite
+    grounding_score: float  # 0–1 fraction of grounded sentences
+    readability_score: float  # Flesch Reading Ease 0–100
+    coverage_score: float  # % retrieved chunks actually cited
+    consistency_score: float  # Self-consistency (0–1)
+    overall_confidence: float  # Weighted composite
     grounding_details: list[GroundingResult]
     warnings: list[str] = Field(default_factory=list)
     passed: bool
 
 
 # ── API Request / Response Models ────────────────────────────────────────────
+
 
 class IngestRequest(BaseModel):
     rebuild_index: bool = False
