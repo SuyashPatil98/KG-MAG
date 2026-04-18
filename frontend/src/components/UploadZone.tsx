@@ -10,8 +10,10 @@ interface UploadZoneProps {
 
 export function UploadZone({ onUpload, isLoading }: UploadZoneProps) {
   const onDrop = useCallback(
-    (accepted: File[]) => { if (accepted.length) onUpload(accepted); },
-    [onUpload]
+    (accepted: File[]) => {
+      if (accepted.length) onUpload(accepted);
+    },
+    [onUpload],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -42,8 +44,8 @@ export function UploadZone({ onUpload, isLoading }: UploadZoneProps) {
         {isLoading
           ? "Ingesting documents..."
           : isDragActive
-          ? "Drop files here"
-          : "Drop PDFs, Markdown, or .txt files"}
+            ? "Drop files here"
+            : "Drop PDFs, Markdown, or .txt files"}
       </p>
       <p className="text-xs text-[#374151] mt-1">or click to browse</p>
     </div>

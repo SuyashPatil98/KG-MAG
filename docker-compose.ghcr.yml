@@ -29,7 +29,8 @@ services:
     container_name: kg-mag-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:8000
+      BACKEND_INTERNAL_URL: http://backend:8000
+      BACKEND_API_KEY: ${BACKEND_API_KEY}
     ports:
       - "3000:3000"
     depends_on:

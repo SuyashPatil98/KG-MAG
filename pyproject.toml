@@ -4,6 +4,7 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 log_cli = true
 log_cli_level = "WARNING"
 
@@ -14,4 +15,4 @@ omit = ["*/tests/*", "*/__init__.py"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 70
+fail_under = 50

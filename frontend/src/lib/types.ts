@@ -22,7 +22,22 @@ export interface GeneratedArticle {
   tags: string[];
   generated_at: string;
   model_used: string;
-  token_usage: Record<string, number>;
+  token_usage: TokenUsageSummary | Record<string, unknown>;
+}
+
+export interface TokenBreakdownEntry {
+  tag: string;
+  input_tokens: number;
+  output_tokens: number;
+  elapsed_s: number;
+}
+
+export interface TokenUsageSummary {
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  calls: number;
+  breakdown: TokenBreakdownEntry[];
 }
 
 export interface DocumentChunk {
@@ -87,4 +102,72 @@ export interface KBStatus {
   vector_db: string;
   embedding_model: string;
   last_updated?: string | null;
+}
+
+export interface UploadedFileInfo {
+  stored_name: string;
+  display_name: string;
+  size_bytes: number;
+  uploaded_at: string;
+  chunk_count: number;
+  indexed: boolean;
+}
+
+export interface UploadListResponse {
+  total_files: number;
+  total_size_bytes: number;
+  files: UploadedFileInfo[];
+}
+
+export interface DeleteUploadsResponse {
+  deleted: string[];
+  not_found: string[];
+  rebuild_documents_processed: number;
+  rebuild_chunks_indexed: number;
+}
+
+export interface ResetCorpusResponse {
+  status: string;
+  uploads_removed: number;
+  artifacts_removed: number;
+}
+
+export interface RebuildCorpusResponse {
+  status: string;
+  documents_processed: number;
+  chunks_indexed: number;
+}
+
+export interface GenerationRunLog {
+  run_id: string;
+  topic: string;
+  status: string;
+  started_at: string;
+  duration_seconds: number;
+  generate_images: boolean;
+  run_qa: boolean;
+  stage_timings: Record<string, number>;
+  token_usage: Record<string, unknown>;
+  image_attempted: number;
+  image_generated: number;
+  image_failed: number;
+  qa_passed?: boolean | null;
+  qa_overall_confidence?: number | null;
+  qa_grounding_score?: number | null;
+  qa_readability_score?: number | null;
+  qa_warning_count: number;
+  error?: string | null;
+}
+
+export interface DashboardMetrics {
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
+  qa_enabled_runs: number;
+  qa_passed_runs: number;
+  qa_failed_runs: number;
+  avg_duration_seconds: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  recent_runs: GenerationRunLog[];
 }

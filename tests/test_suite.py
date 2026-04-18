@@ -18,7 +18,6 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────────────
@@ -82,21 +81,25 @@ def sample_txt_file(temp_dir):
 # Test: Text cleaning
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestTextCleaning:
     def test_removes_null_bytes(self):
         from ingestion.pipeline import clean_text
+
         raw = "Hello\x00 World\x00"
         assert "\x00" not in clean_text(raw)
 
     def test_normalizes_unicode(self):
         from ingestion.pipeline import clean_text
+
         # Café written with combining accent vs precomposed
-        raw = "cafe\u0301"   # decomposed NFD
+        raw = "cafe\u0301"  # decomposed NFD
         cleaned = clean_text(raw)
         assert cleaned == "café"
 
     def test_collapses_excessive_newlines(self):
         from ingestion.pipeline import clean_text
+
         raw = "Line 1\n\n\n\n\nLine 2"
         cleaned = clean_text(raw)
         assert "\n\n\n" not in cleaned
@@ -105,6 +108,7 @@ class TestTextCleaning:
 
     def test_preserves_paragraphs(self):
         from ingestion.pipeline import clean_text
+
         raw = "Para one.\n\nPara two."
         cleaned = clean_text(raw)
         assert "\n\n" in cleaned
@@ -114,9 +118,11 @@ class TestTextCleaning:
 # Test: Document ingestion
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestIngestion:
     def test_markdown_ingestion(self, sample_md_file):
         from ingestion.pipeline import ingest_file
+
         chunks = ingest_file(sample_md_file)
         assert len(chunks) > 0
         for chunk in chunks:
@@ -127,11 +133,13 @@ class TestIngestion:
 
     def test_text_ingestion(self, sample_txt_file):
         from ingestion.pipeline import ingest_file
+
         chunks = ingest_file(sample_txt_file)
         assert len(chunks) > 0
 
     def test_chunk_overlap_preserves_context(self, temp_dir):
         from ingestion.pipeline import chunk_document, extract_markdown
+
         p = temp_dir / "long.md"
         # Create a document that will need multiple chunks
         words = " ".join([f"word{i}" for i in range(1000)])
@@ -150,12 +158,14 @@ class TestIngestion:
 
     def test_heading_preserved_in_chunks(self, sample_md_file):
         from ingestion.pipeline import ingest_file
+
         chunks = ingest_file(sample_md_file)
         headings = [c.heading for c in chunks if c.heading]
         assert len(headings) > 0
 
     def test_unsupported_file_raises(self, temp_dir):
         from ingestion.pipeline import ingest_file
+
         p = temp_dir / "test.docx"
         p.write_bytes(b"fake docx content")
         with pytest.raises(ValueError, match="Unsupported file type"):
@@ -163,6 +173,7 @@ class TestIngestion:
 
     def test_empty_file_returns_no_chunks(self, temp_dir):
         from ingestion.pipeline import ingest_file
+
         p = temp_dir / "empty.txt"
         p.write_text("   \n\n  ")
         chunks = ingest_file(p)
@@ -170,13 +181,51 @@ class TestIngestion:
 
     def test_chunk_ids_are_unique(self, sample_md_file):
         from ingestion.pipeline import ingest_file
+
         chunks = ingest_file(sample_md_file)
         ids = [c.chunk_id for c in chunks]
         assert len(ids) == len(set(ids)), "Chunk IDs must be unique"
 
+    def test_heading_only_document_still_chunks(self, temp_dir):
+        from ingestion.pipeline import ingest_file
+
+        p = temp_dir / "caps_headings.txt"
+        p.write_text(
+            "INTRODUCTION\n\nSYSTEM OVERVIEW\n\nIMPLEMENTATION DETAILS\n\nCONCLUSION"
+        )
+
+        chunks = ingest_file(p)
+        assert len(chunks) >= 1
+        assert any("INTRODUCTION" in c.text for c in chunks)
+
+    def test_contextual_heading_is_retained(self, temp_dir):
+        from ingestion.pipeline import ingest_file
+
+        p = temp_dir / "contextual.md"
+        p.write_text(
+            "# Design Decisions\n\nWe compare index rebuild strategies for resilient retrieval."
+        )
+
+        chunks = ingest_file(p)
+        assert len(chunks) >= 1
+        assert chunks[0].heading is not None
+        assert "Design Decisions" in chunks[0].text
+
+    def test_overlap_greater_than_chunk_size_is_safe(self, temp_dir):
+        from ingestion.pipeline import chunk_document, extract_markdown
+
+        p = temp_dir / "overlap_edge.md"
+        words = " ".join(f"token{i}" for i in range(250))
+        p.write_text(f"# Edge Case\n\n{words}")
+
+        text, meta = extract_markdown(p)
+        chunks = chunk_document(text, meta, chunk_size=40, overlap=200)
+        assert len(chunks) >= 1
+
     def test_deterministic_chunk_ids(self, sample_md_file):
         """Same file → same chunk IDs (important for deduplication)."""
         from ingestion.pipeline import ingest_file
+
         chunks1 = ingest_file(sample_md_file)
         chunks2 = ingest_file(sample_md_file)
         ids1 = {c.chunk_id for c in chunks1}
@@ -188,11 +237,13 @@ class TestIngestion:
 # Test: Embedding Engine
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestEmbeddingEngine:
     """Tests that do not require GPU or network."""
 
     def test_encode_returns_correct_shape(self):
         from backend.tools.embedding import EmbeddingEngine
+
         engine = EmbeddingEngine()
         texts = ["Hello world", "Machine learning is fascinating"]
         vecs = engine.encode(texts)
@@ -200,12 +251,14 @@ class TestEmbeddingEngine:
 
     def test_encode_single(self):
         from backend.tools.embedding import EmbeddingEngine
+
         engine = EmbeddingEngine()
         vec = engine.encode_single("Test sentence")
         assert vec.shape == (engine.dimension,)
 
     def test_normalized_vectors(self):
         from backend.tools.embedding import EmbeddingEngine
+
         engine = EmbeddingEngine()
         vecs = engine.encode(["Normalize me"], normalize=True)
         norm = float(np.linalg.norm(vecs[0]))
@@ -213,12 +266,14 @@ class TestEmbeddingEngine:
 
     def test_empty_input(self):
         from backend.tools.embedding import EmbeddingEngine
+
         engine = EmbeddingEngine()
         vecs = engine.encode([])
         assert vecs.shape[0] == 0
 
     def test_similar_texts_high_cosine(self):
         from backend.tools.embedding import EmbeddingEngine
+
         engine = EmbeddingEngine()
         v1 = engine.encode_single("The quick brown fox")
         v2 = engine.encode_single("A quick brown fox jumps")
@@ -232,10 +287,12 @@ class TestEmbeddingEngine:
 # Test: Vector Store
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestVectorStore:
     def test_add_and_search(self, temp_dir):
         from backend.tools.vector_store import FAISSVectorStore
         from ingestion.pipeline import ingest_file
+
         store = FAISSVectorStore(index_path=temp_dir / "idx")
 
         p = temp_dir / "doc.txt"
@@ -253,6 +310,7 @@ class TestVectorStore:
     def test_search_returns_ranked_results(self, temp_dir):
         from backend.tools.vector_store import FAISSVectorStore
         from ingestion.pipeline import ingest_file
+
         store = FAISSVectorStore(index_path=temp_dir / "idx2")
 
         p = temp_dir / "doc.txt"
@@ -268,6 +326,7 @@ class TestVectorStore:
     def test_persist_and_reload(self, temp_dir):
         from backend.tools.vector_store import FAISSVectorStore
         from ingestion.pipeline import ingest_file
+
         store = FAISSVectorStore(index_path=temp_dir / "idx3")
 
         p = temp_dir / "doc.txt"
@@ -287,6 +346,7 @@ class TestVectorStore:
         """Adding same chunks twice should not duplicate."""
         from backend.tools.vector_store import FAISSVectorStore
         from ingestion.pipeline import ingest_file
+
         store = FAISSVectorStore(index_path=temp_dir / "idx4")
 
         p = temp_dir / "doc.txt"
@@ -301,6 +361,7 @@ class TestVectorStore:
 
     def test_empty_search_returns_empty(self, temp_dir):
         from backend.tools.vector_store import FAISSVectorStore
+
         store = FAISSVectorStore(index_path=temp_dir / "empty_idx")
         results = store.search("anything")
         assert results == []
@@ -310,10 +371,12 @@ class TestVectorStore:
 # Test: Reranker
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestReranker:
     def test_feature_extraction_shape(self, temp_dir):
         from backend.models.reranker import extract_features
         from ingestion.pipeline import ingest_file
+
         p = temp_dir / "doc.txt"
         p.write_text(SAMPLE_TEXT)
         chunks = ingest_file(p)
@@ -331,6 +394,7 @@ class TestReranker:
 
         # Ensure model doesn't exist
         import backend.models.reranker as rm
+
         orig_path = rm.MODEL_PATH
         rm.MODEL_PATH = temp_dir / "nonexistent_model.pkl"
 
@@ -355,10 +419,12 @@ class TestReranker:
 # Test: QA / Flesch score
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestQA:
     def test_flesch_score_range(self):
         """Flesch score must be in [0, 100]."""
         from backend.agents.orchestrator import CriticAgent
+
         critic = CriticAgent.__new__(CriticAgent)
 
         easy = "The cat sat on the mat. It was a small cat."
@@ -373,6 +439,7 @@ class TestQA:
 
     def test_flesch_empty_text(self):
         from backend.agents.orchestrator import CriticAgent
+
         critic = CriticAgent.__new__(CriticAgent)
         score = critic._compute_flesch("")
         assert score == 50.0
@@ -382,20 +449,22 @@ class TestQA:
 # Test: API endpoints (integration — requires running backend or TestClient)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestAPI:
     @pytest.fixture
     def client(self):
         """FastAPI test client with mocked dependencies."""
         from fastapi.testclient import TestClient
 
-           with patch("backend.api.main.FAISSVectorStore") as mock_vs, \
-               patch("backend.api.main.LLMClient"), \
-               patch("backend.api.main.ArticleOrchestrator"):
+        with patch("backend.api.main.FAISSVectorStore") as mock_vs, patch(
+            "backend.api.main.LLMClient"
+        ), patch("backend.api.main.ArticleOrchestrator"):
 
             mock_vs.return_value.total_vectors = 0
             mock_vs.return_value.all_chunks.return_value = []
 
             from backend.api.main import create_app
+
             app = create_app()
             yield TestClient(app)
 
@@ -426,6 +495,7 @@ class TestAPI:
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: Directory ingestion
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestDirectoryIngestion:
     def test_ingest_directory(self, temp_dir):
