@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import ArticlePreview from "@/components/ArticlePreview";
 import QAReportCard from "@/components/QAReportCard";
 import UploadZone from "@/components/UploadZone";
 import KBStatus from "@/components/KBStatus";
 import { generateArticle, ingestDocuments } from "@/lib/api";
 import type { GenerateResponse } from "@/lib/types";
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unexpected error";
+}
 
 export default function HomePage() {
   const [topic, setTopic] = useState("");
@@ -34,8 +38,8 @@ export default function HomePage() {
       addProgress(
         `✓ Ingested ${res.documents_processed} docs, ${res.chunks_created} chunks in ${res.duration_seconds}s`
       );
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     } finally {
       setIsIngesting(false);
     }
@@ -64,9 +68,10 @@ export default function HomePage() {
       if (runQA) addProgress("→ CriticAgent: running QA checks...");
       addProgress(`✓ Article generated in ${res.duration_seconds}s`);
       setResult(res);
-    } catch (e: any) {
-      setError(e.message ?? "Generation failed");
-      addProgress(`✗ Error: ${e.message}`);
+    } catch (e: unknown) {
+      const message = getErrorMessage(e);
+      setError(message || "Generation failed");
+      addProgress(`✗ Error: ${message}`);
     } finally {
       setIsGenerating(false);
     }

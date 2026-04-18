@@ -7,6 +7,7 @@
 import type {
   GenerateRequest,
   GenerateResponse,
+  GeneratedArticle,
   IngestResponse,
   KBStatus,
 } from "./types";
@@ -79,8 +80,8 @@ export async function generateArticle(
   });
 }
 
-export async function getArticle(articleId: string): Promise<any> {
-  return apiFetch(`/api/article/${articleId}`);
+export async function getArticle(articleId: string): Promise<GeneratedArticle> {
+  return apiFetch<GeneratedArticle>(`/api/article/${articleId}`);
 }
 
 export async function listArticles(): Promise<
